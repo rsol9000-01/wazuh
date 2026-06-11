@@ -1,0 +1,33 @@
+ wazuh.agent:
+    image: wazuh/wazuh-agent:4.14.1
+    restart: always
+    container_name: wazuh.agent
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "1.0"
+    #user: "1001:990"
+    environment:
+      - WAZUH_MANAGER_SERVER=10.20.200.223
+      - WAZUH_AGENT_NAME=localhost
+      - WAZUH_MANAGER_SERVER_PORT=1514
+    volumes:
+      - ./wazuh-agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/os-release:/etc/os-release:ro
+      - /var/log:/var/log
+      - TZ=America/Costa_Rica
+      - /sys:/sys:ro
+      #- /etc:/host/etc:ro
+      #- /var/run:/var/run
+      #- /sys:/sys:ro
+      #- /proc:/proc:ro
+      #- /proc:/proc:ro
+      #- /dev:/dev:ro
+      #- /proc/meminfo:/host_proc_meminfo:ro
+    #depends_on:
+    #  - wazuh.manager

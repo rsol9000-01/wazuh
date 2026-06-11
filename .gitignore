@@ -1,0 +1,12 @@
+# Docker
+.env
+
+#data/
+*.log
+
+# Editor
+.vscode/
+.idea/
+
+# Certificados para https
+config/wazuh_indexer_ssl_certs/*
