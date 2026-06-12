@@ -48,6 +48,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+FLAG_SERVER=false
+
 # ---------- parse args
 CHOICE="${1:-}"
 ACTION="${2:-up}"
@@ -72,30 +74,32 @@ fi
 
 #---------- Check the second argument for a custom seed value (optional)
 
-if [[ -z "$CHOICE" ]]; then
-  echo "Select deployment type:"
-  select opt in "server" "agent" "exit"; do
-    case $opt in
-      server) CHOICE=server; break ;;
-      agent) CHOICE=agent; break ;;
-      exit) printf "Exiting.\n"; exit 0 ;;
-      *) echo "Invalid option" ;;
-    esac
-  done
+#if [[ -z "$CHOICE" ]]; then
+#  echo "Select deployment type:"
+#  select opt in "server" "agent" "exit"; do
+#    case $opt in
+#      server) CHOICE=server; break ;;
+#      agent) CHOICE=agent; break ;;
+#      exit) printf "Exiting.\n"; exit 0 ;;
+#      *) echo "Invalid option" ;;
+#    esac
+#  done
+#fi
+
+
+#print_section "$CYAN" "Selected: $CHOICE | Action: $ACTION"
+
+# ---------- Compose file to deploy 
+COMPOSE_FILE="docker-compose.yml"
+if [ "$FLAG_SERVER" = "false" ]; then
+  COMPOSE_FILE="docker-compose-agent.yml"
 fi
 
-if [[ "$CHOICE" != "server" && "$CHOICE" != "agent" ]]; then
-  usage
-  exit 1
-fi
-
-print_section "$CYAN" "Selected: $CHOICE | Action: $ACTION"
-
-# Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
-COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
-if [[ "$CHOICE" == "agent" ]]; then
-  COMPOSE_FILE="$REPO_ROOT/docker-compose-agent.yml"
-fi
+## Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
+#COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
+#if [[ "$CHOICE" == "agent" ]]; then
+#  COMPOSE_FILE="$REPO_ROOT/docker-compose-agent.yml"
+#fi
 
 if [[ ! -f "$COMPOSE_FILE" ]]; then
   # try sibling wazuh-docker
