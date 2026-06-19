@@ -90,9 +90,10 @@ fi
 #print_section "$CYAN" "Selected: $CHOICE | Action: $ACTION"
 
 # ---------- Compose file to deploy 
+CERTS_FILE="generate-indexer-certs.yml"
 COMPOSE_FILE="docker-compose.yml"
 if [ "$FLAG_SERVER" = "false" ]; then
-  COMPOSE_FILE="docker-compose-agent.yml"
+  COMPOSE_FILE="agent/docker-compose-agent.yml"
 fi
 
 ## Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
@@ -101,62 +102,72 @@ fi
 #  COMPOSE_FILE="$REPO_ROOT/docker-compose-agent.yml"
 #fi
 
-if [[ ! -f "$COMPOSE_FILE" ]]; then
-  # try sibling wazuh-docker
-  ALT="$REPO_ROOT/../wazuh-docker/$(basename "$COMPOSE_FILE")"
-  if [[ -f "$ALT" ]]; then
-    COMPOSE_FILE="$ALT"
-    echo -e "${YELLOW}Note:${NC} using compose file from ../wazuh-docker: $COMPOSE_FILE"
-  else
-    echo -e "${RED}Error:${NC} Compose file not found: $COMPOSE_FILE" >&2
-    exit 1
-  fi
-fi
+#############################################################################################################
+####################################    Check dependencies  #################################################
+#############################################################################################################
 
-echo -e "✅  Compose file: ${GREEN}$COMPOSE_FILE${NC}"
 
-# Check docker available
+#--------------- Docker ---------------
 if ! command -v docker >/dev/null 2>&1; then
-  echo -e "${RED}Error:${NC} docker is not installed or not in PATH." >&2
-  exit 1
+    echo "❌  Error: docker is not installed or not in PATH."
+    exit 1
 fi
-echo -e "🔧  Docker: $(docker --version | head -n1)"
+echo "✅  Docker ready: $(docker --version | cut -d' ' -f1-3)"
 
-# Prepare docker compose command array
-case "$ACTION" in
-  up)
-    CMD=(docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env" up -d)
-    ;;
-  down)
-    CMD=(docker compose -f "$COMPOSE_FILE" down)
-    ;;
-  logs)
-    CMD=(docker compose -f "$COMPOSE_FILE" logs -f)
-    ;;
-  ps)
-    CMD=(docker compose -f "$COMPOSE_FILE" ps)
-    ;;
-  restart)
-    CMD=(docker compose -f "$COMPOSE_FILE" restart)
-    ;;
-  *)
-    echo -e "${RED}Unknown action:${NC} $ACTION" >&2
-    usage
-    exit 2
-    ;;
-esac
-
-# Run command
-echo -e "\n${BLUE}Running:${NC} ${CMD[*]}\n"
-"${CMD[@]}"
-
-# If action was up and server selected, tail main init logs briefly
-if [[ "$ACTION" == "up" ]]; then
-  if [[ "$CHOICE" == "server" ]]; then
-    echo -e "\n${GREEN}Tailing wazuh manager logs (ctrl+c to stop)...${NC}\n"
-    docker compose -f "$COMPOSE_FILE" logs -f wazuh.manager || true
-  else
-    echo -e "\n${GREEN}Tailing wazuh agent logs (ctrl+c to stop)...${NC}\n"
-    docker compose -f "$COMPOSE_FILE" logs -f wazuh.agent || true
-  fi
+#--------------- curl -------------------
+if ! command -v curl &> /dev/null; then
+  echo "🔧  Installing curl..."
+  command -v apt-get &> /dev/null && apt-get update -qq && apt-get install -y -qq curl
 fi
+command -v curl &> /dev/null || { echo "❌  Error: curl is not installed or not in PATH."; exit 1; }
+echo "✅  curl ready: $(curl -V | head -n1 | cut -d' ' -f1-2)"
+
+###################################################################################################
+###################################    Check required files  ######################################
+###################################################################################################
+
+
+#--------------- .env  -------------------
+if [ ! -f ".env" ]; then
+    echo "🚨  Warning: .env file not found."
+    if [ -f ".env.example" ]; then
+        echo "ℹ️  Copying .env.example -> .env ..."
+        cp .env.example .env
+        echo "⚠️  Edit .env with your values before continuing."
+    fi
+    exit 1
+fi
+echo "✅  The environment variables will be loaded from the .env file."
+
+
+#--------------- Docker compose file ------------------
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "❌  Error: $COMPOSE_FILE not found."
+    exit 1
+fi
+echo "✅  Docker Compose file found: $COMPOSE_FILE"
+
+#------------ generate-indexer-certs - server only ------------------
+
+if [ ! -f "$CERTS_FILE" ]; then
+    echo "❌  Error: $CERTS_FILE not found."
+    exit 1
+fi
+echo "✅  Certs file found: $CERTS_FILE"
+
+#########################################################################################################
+#####################    Generate self-signed certificates  #############################################
+#########################################################################################################
+if [ "$FLAG_SERVER" = "true" ]; then
+  echo "🔐 Generating self-signed certificates..."
+  docker compose -f generate-indexer-certs.yml run --rm generator
+  echo "   - ✅ Certificates generated at /config/wazuh_indexer_ssl_certs."
+fi
+
+#---------- Run the compose file ----------------
+echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
+docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env" up -d
+
+
+
+
