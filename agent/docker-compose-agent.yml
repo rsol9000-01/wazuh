@@ -17,7 +17,7 @@ services:
       - WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
     volumes:
-      - ./wazuh-agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
+      - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/os-release:/etc/os-release:ro
       - /var/log:/var/log

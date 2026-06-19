@@ -161,7 +161,7 @@ echo "✅  Certs file found: $CERTS_FILE"
 if [ "$FLAG_SERVER" = "true" ]; then
   echo "🔐 Generating self-signed certificates..."
   docker compose -f generate-indexer-certs.yml run --rm generator
-  echo "   - ✅ Certificates generated at /config/wazuh_indexer_ssl_certs."
+  echo "✅ Certificates generated at /config/wazuh_indexer_ssl_certs."
 fi
 
 #---------- Run the compose file ----------------
