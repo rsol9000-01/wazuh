@@ -96,13 +96,40 @@ if [ "$FLAG_SERVER" = "false" ]; then
   COMPOSE_FILE="agent/docker-compose-agent.yml"
 fi
 
+# ------------- Get the Docker group ID
+DOCKER_GID=$(getent group docker | cut -d: -f3)
+if [ -z "$DOCKER_GID" ]; then
+    echo "❌  Docker group not found."
+    exit 1
+fi
+export DOCKER_GID
+echo "🐳  Docker GID: $DOCKER_GID"
+
+INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
 ## Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
 #COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 #if [[ "$CHOICE" == "agent" ]]; then
 #  COMPOSE_FILE="$REPO_ROOT/docker-compose-agent.yml"
+
 #fi
 
 #############################################################################################################
+############################    Establecer vm.max_map_count  ################################################
+#############################################################################################################
+
+CURRENT=$(cat /proc/sys/vm/max_map_count)
+REQUIRED=262144
+
+echo -e "💾  Current vm.max_map_count: ${GREEN}$CURRENT${NC}"
+
+if [ "$CURRENT" -lt "$REQUIRED" ]; then
+    echo "   - 🔧 Setting vm.max_map_count to $REQUIRED..."
+    sysctl -w vm.max_map_count=$REQUIRED
+else
+    echo "    - ✅ vm.max_map_count already satisfies the requirement."
+fi
+
+#######################################################################################################
 ####################################    Check dependencies  #################################################
 #############################################################################################################
 
@@ -121,6 +148,15 @@ if ! command -v curl &> /dev/null; then
 fi
 command -v curl &> /dev/null || { echo "❌  Error: curl is not installed or not in PATH."; exit 1; }
 echo "✅  curl ready: $(curl -V | head -n1 | cut -d' ' -f1-2)"
+
+#--------------- apache utilities for htpasswd -------------------
+#if ! command -v htpasswd &> /dev/null; then
+#  echo "🔧  Installing apache2-utils..."
+#  command -v apt-get &> /dev/null && apt-get update -qq && apt-get install -y -qq apache2-utils
+#fi
+#command -v htpasswd &> /dev/null || { echo "❌  Error: htpasswd is not installed or not in PATH."; exit 1; }
+#echo "✅  htpasswd ready."
+
 
 ###################################################################################################
 ###################################    Check required files  ######################################
@@ -145,29 +181,119 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     echo "❌  Error: $COMPOSE_FILE not found."
     exit 1
 fi
-echo "✅  Docker Compose file found: $COMPOSE_FILE"
+echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
 
+#--------------- Internal users file ------------------
+if [ ! -f "$INTERNAL_USERS_FILE" ]; then
+    echo "❌  Error: $INTERNAL_USERS_FILE not found."
+    exit 1
+fi
+echo -e "✅  Internal users file found: ${GREEN}$INTERNAL_USERS_FILE${NC}"
 #------------ generate-indexer-certs - server only ------------------
 
 if [ ! -f "$CERTS_FILE" ]; then
     echo "❌  Error: $CERTS_FILE not found."
     exit 1
 fi
-echo "✅  Certs file found: $CERTS_FILE"
+echo -e "✅  Certs file found: ${GREEN}$CERTS_FILE${NC}"
+
+#------------ post-install script - server only ------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+ 
+  SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+
+
+  if [ -z "$SCRIPT_POST_INSTALL" ]; then
+      echo "❌ Error: SCRIPT_POST_INSTALL is not set in .env"
+      exit 1
+  fi
+   
+  if [ ! -f "$SCRIPT_POST_INSTALL" ]; then
+    echo "❌  Error: $SCRIPT_POST_INSTALL not found."
+    exit 1
+  fi
+  echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
+fi
+
+############################################################################################################
+############################   get hostname for agent name  ################################################
+############################################################################################################
+
+LOCAL_AGENT_HOSTNAME=$(grep '^LOCAL_AGENT_HOSTNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+
+if [[ "$LOCAL_AGENT_HOSTNAME" == "localhost" ]]; then
+    #---------- change to actual hostname ----------------
+    LOCAL_AGENT_HOSTNAME=$(hostname -f)
+fi
+
+echo -e "📝  Agent hostname to use: ${GREEN}$LOCAL_AGENT_HOSTNAME${NC}"
+export LOCAL_AGENT_HOSTNAME
+
+#--------------- Setting up API users and passwords   -------------------
+
+#--------------- API_USERNAME and API_PASSWORD   -------------------
+API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
+
+if [ ! -f "$API_DATA" ]; then
+    echo "❌  Error: $API_DATA not found."
+    exit 1
+fi
+echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
+
+#SI NO EXISTE SE CREAN LAS VARIABLES ********************FALTA
+
+API_NEW_USERNAME=$(grep '^API_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+
+#SE VALIDA QUE LA CONTRSEÑA NO TENGA $
+if [[ "$API_NEW_PASSWORD" == *'$'* ]]; then
+    echo "❌  Error: Character \"\$\" it is not allowed on API_PASSWORD."
+    exit 1
+fi
+if [[ "$API_NEW_USERNAME" == *'$'* ]]; then
+    echo "❌  Error: Character \"\$\" it is not allowed on API_USERNAME."
+    exit 1
+fi
+
+sed -i "s|^\([[:space:]]*username:[[:space:]]*\).*|\1$API_NEW_USERNAME|" "$API_DATA"
+sed -i "s|^\([[:space:]]*password:[[:space:]]*\).*|\1$API_NEW_PASSWORD|" "$API_DATA"
+
+echo -e "✅  API data file updated with credentials defined on .env: ${YELLOW}$API_NEW_USERNAME:API_PASSWORD${NC}"
+
+#--------------- NEW USER DEFINED BY MY_USERNAME AND MY_PASSWORD  -------------------
+
+MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+MY_PASSWORD=$(grep '^MY_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+MY_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$MY_PASSWORD")
+
+if grep -q "^[[:space:]]*${MY_USERNAME}:" "$INTERNAL_USERS_FILE"; then
+    #sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s/^[[:space:]]*hash:.*/  hash: \"${MY_HASH}\"/" "$INTERNAL_USERS_FILE"
+    sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${MY_HASH}\"#" "$INTERNAL_USERS_FILE"
+    
+    echo -e "✅  Password updated for user ${YELLOW}$MY_USERNAME${NC}"
+else
+    cat >> "$INTERNAL_USERS_FILE" <<EOF
+
+${MY_USERNAME}:
+  hash: "${MY_HASH}"
+  reserved: false
+  backend_roles:
+    - "admin"
+  description: "Usuario administrador nuevo"
+EOF
+echo "✅  New user created with credentials defined on .env: $MY_USERNAME:MY_PASSWORD"
+fi
 
 #########################################################################################################
 #####################    Generate self-signed certificates  #############################################
 #########################################################################################################
 if [ "$FLAG_SERVER" = "true" ]; then
-  echo "🔐 Generating self-signed certificates..."
+  echo "🔐  Generating self-signed certificates..."
   docker compose -f generate-indexer-certs.yml run --rm generator
-  echo "✅ Certificates generated at /config/wazuh_indexer_ssl_certs."
+  echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
 fi
-
+#exit 1
 #---------- Run the compose file ----------------
 echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env" up -d
-
-
-
-
+docker compose logs -f wazuh-init

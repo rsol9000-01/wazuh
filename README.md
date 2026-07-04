@@ -1,3 +1,7 @@
+Agente de Wazuh
+
+Ejecutar el agente de Wazuh en un contenedor Docker ofrece una opción ligera para integraciones y para recopilar registros mediante syslog, sin necesidad de instalar el agente directamente en un host. Sin embargo, al implementarse de esta manera, el agente en contenedor no puede acceder ni monitorizar directamente el sistema host
+
 # **Wazuh Monitoring Stack – Docker Compose**
 
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker)

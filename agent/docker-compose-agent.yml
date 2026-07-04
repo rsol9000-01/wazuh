@@ -3,6 +3,7 @@ services:
     image: wazuh/wazuh-agent:4.14.1
     restart: always
     container_name: wazuh.agent
+    privileged: true
     deploy:
       resources:
         limits:
@@ -12,16 +13,18 @@ services:
           memory: 512M
           cpus: "1.0"
     #user: "1001:990"
+    group_add:
+      - "${DOCKER_GID}"
     environment:
-      - WAZUH_MANAGER_SERVER=${MANAGER_SERVER}
+      - WAZUH_MANAGER_SERVER=${AGENT_MANAGER_SERVER}
       - WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
     volumes:
-      - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
+      - ./agent/conf/remote_ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/os-release:/etc/os-release:ro
       - /var/log:/var/log
-      - TZ=America/Costa_Rica
+      - TZ=${TZ}
       - /sys:/sys:ro
       #- /etc:/host/etc:ro
       #- /var/run:/var/run
