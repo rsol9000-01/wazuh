@@ -89,6 +89,8 @@ fi
 
 #print_section "$CYAN" "Selected: $CHOICE | Action: $ACTION"
 
+AGENT_AUTH_PASSWORD_FILE=$REPO_ROOT/config/wazuh_cluster/authd.pass
+
 # ---------- Compose file to deploy 
 CERTS_FILE="generate-indexer-certs.yml"
 COMPOSE_FILE="docker-compose.yml"
@@ -104,6 +106,7 @@ if [ -z "$DOCKER_GID" ]; then
 fi
 export DOCKER_GID
 echo "🐳  Docker GID: $DOCKER_GID"
+
 
 INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
 ## Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
@@ -125,6 +128,8 @@ echo -e "💾  Current vm.max_map_count: ${GREEN}$CURRENT${NC}"
 if [ "$CURRENT" -lt "$REQUIRED" ]; then
     echo "   - 🔧 Setting vm.max_map_count to $REQUIRED..."
     sysctl -w vm.max_map_count=$REQUIRED
+    echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
+    sysctl -p
 else
     echo "    - ✅ vm.max_map_count already satisfies the requirement."
 fi
@@ -191,13 +196,14 @@ fi
 echo -e "✅  Internal users file found: ${GREEN}$INTERNAL_USERS_FILE${NC}"
 #------------ generate-indexer-certs - server only ------------------
 
-if [ ! -f "$CERTS_FILE" ]; then
+if [ "$FLAG_SERVER" = "true" ]; then
+  if [ ! -f "$CERTS_FILE" ]; then
     echo "❌  Error: $CERTS_FILE not found."
     exit 1
+  fi
+  echo -e "✅  Certs file found: ${GREEN}$CERTS_FILE${NC}"
 fi
-echo -e "✅  Certs file found: ${GREEN}$CERTS_FILE${NC}"
-
-#------------ post-install script - server only ------------------
+#------------ post-install script  ------------------
 if [ "$FLAG_SERVER" = "true" ]; then
  
   SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
@@ -213,7 +219,16 @@ if [ "$FLAG_SERVER" = "true" ]; then
     exit 1
   fi
   echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
+  chmod +x $SCRIPT_POST_INSTALL
 fi
+#------------- Agent authentication password file ------------------------------
+
+if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
+    echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
+    exit 1
+  fi
+  echo -e "✅  Auth password file found."
+
 
 ############################################################################################################
 ############################   get hostname for agent name  ################################################
@@ -293,7 +308,20 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
 fi
 #exit 1
+#########################################################################################################
+#####################    COPY AGENT AUTH PASS TO RESPECTIVE FILE  #######################################
+#########################################################################################################
+AGENT_AUTH_PASSWORD=$(grep '^AGENT_AUTH_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+
+echo -n "$AGENT_AUTH_PASSWORD" > $AGENT_AUTH_PASSWORD_FILE
+
+# ------ Create Wazuh group and set permissions for the agent authentication password file
+groupadd -g 999 wazuh 2>/dev/null || true
+chmod 640 $AGENT_AUTH_PASSWORD_FILE
+chown root:wazuh $AGENT_AUTH_PASSWORD_FILE
+echo -e "✅  Agent authentication password saved to: ${GREEN}$AGENT_AUTH_PASSWORD_FILE${NC}"
+
 #---------- Run the compose file ----------------
 echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env" up -d
-docker compose logs -f wazuh-init
+#docker compose logs -f wazuh-init

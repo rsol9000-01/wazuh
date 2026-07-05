@@ -56,7 +56,7 @@ snapshotrestore:
   description: "Demo snapshotrestore user"
 
 tfgadmin:
-  hash: "$2y$12$SaaGslQ89dEhSRTR0ei8kuekX5x1Rh4hn9oYmYb9ElpQ1sryRQFjm"
+  hash: "$2y$12$YYZgWhUX1F6SBvdlGbpx9eYCuOhPsuR.NrHvv5fymSTqMAb9sP40."
   reserved: false
   backend_roles:
     - "admin"

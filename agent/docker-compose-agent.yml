@@ -1,8 +1,9 @@
 services:
   wazuh.agent:
-    image: wazuh/wazuh-agent:4.14.1
+    image: wazuh/wazuh-agent:4.14.5
     restart: always
     container_name: wazuh.agent
+    hostname: $LOCAL_AGENT_HOSTNAME
     privileged: true
     deploy:
       resources:
@@ -17,14 +18,16 @@ services:
       - "${DOCKER_GID}"
     environment:
       - WAZUH_MANAGER_SERVER=${AGENT_MANAGER_SERVER}
-      - WAZUH_AGENT_NAME=localhost
+      #- WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
+      - TZ=${TZ}
     volumes:
-      - ./agent/conf/remote_ossec.conf:/var/ossec/etc/ossec.conf
+      - ./${SCRIPT_POST_INSTALL}:/init_01.sh:ro
+      - ./config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
+      - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/os-release:/etc/os-release:ro
       - /var/log:/var/log
-      - TZ=${TZ}
       - /sys:/sys:ro
       #- /etc:/host/etc:ro
       #- /var/run:/var/run
@@ -33,5 +36,6 @@ services:
       #- /proc:/proc:ro
       #- /dev:/dev:ro
       #- /proc/meminfo:/host_proc_meminfo:ro
+    entrypoint: ["/init_01.sh"]
     #depends_on:
     #  - wazuh.manager 
