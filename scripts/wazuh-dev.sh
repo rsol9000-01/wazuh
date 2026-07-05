@@ -104,7 +104,8 @@ if [ -z "$DOCKER_GID" ]; then
     echo "❌  Docker group not found."
     exit 1
 fi
-export DOCKER_GID
+
+#export DOCKER_GID
 echo "🐳  Docker GID: $DOCKER_GID"
 
 
@@ -299,6 +300,9 @@ EOF
 echo "✅  New user created with credentials defined on .env: $MY_USERNAME:MY_PASSWORD"
 fi
 
+# Copy GID
+sed -i "s|^\([[:space:]]*DOCKER_GID=[[:space:]]*\).*|\1$DOCKER_GID|" .env
+
 #########################################################################################################
 #####################    Generate self-signed certificates  #############################################
 #########################################################################################################
@@ -316,7 +320,7 @@ AGENT_AUTH_PASSWORD=$(grep '^AGENT_AUTH_PASSWORD[[:space:]]*=' .env | sed 's/^[^
 echo -n "$AGENT_AUTH_PASSWORD" > $AGENT_AUTH_PASSWORD_FILE
 
 # ------ Create Wazuh group and set permissions for the agent authentication password file
-groupadd -g 999 wazuh 2>/dev/null || true
+groupadd -r wazuh 2>/dev/null || true
 chmod 640 $AGENT_AUTH_PASSWORD_FILE
 chown root:wazuh $AGENT_AUTH_PASSWORD_FILE
 echo -e "✅  Agent authentication password saved to: ${GREEN}$AGENT_AUTH_PASSWORD_FILE${NC}"
