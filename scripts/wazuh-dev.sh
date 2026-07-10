@@ -38,6 +38,50 @@ print_section() {
   echo -e "${color}-----------------------------------------------------${NC}"
 }
 
+validate_password() {
+  local password="$1"
+  local var_name="${2:-Password}"  # just for error message
+  local len=${#password}
+
+  # Longitud entre 8 y 64
+  if (( len < 8 || len > 64 )); then
+    echo "❌  Error: ${var_name} must be between 8 and 64 characters long (current: ${len})."
+    return 1
+  fi
+
+  # Al menos una mayúscula
+  if [[ ! "$password" =~ [A-Z] ]]; then
+    echo "❌  Error: ${var_name} must contain at least one uppercase letter."
+    return 1
+  fi
+
+  # Al menos una minúscula
+  if [[ ! "$password" =~ [a-z] ]]; then
+    echo "❌  Error: ${var_name} must contain at least one lowercase letter."
+    return 1
+  fi
+
+  # Al menos un número
+  if [[ ! "$password" =~ [0-9] ]]; then
+    echo "❌  Error: ${var_name} must contain at least one digit."
+    return 1
+  fi
+
+  # Al menos uno de los símbolos permitidos: . * + ? -
+  if [[ ! "$password" =~ [.*+?\-] ]]; then
+    echo "❌  Error: ${var_name} must contain at least one of the following symbols: . * + ? -"
+    return 1
+  fi
+
+  # Characters not allowed: $ | & \
+  if [[ "$password" == *['$|&\']* ]]; then
+    echo "❌  Error: Character (\$, |, &, \\) it is not allowed on ${var_name}."
+    exit 1
+  fi
+
+  return 0
+}
+
 clear
 print_section "$GREEN" "Wazuh infrastructure stack installation script"
 #--------------  Error control
@@ -99,23 +143,17 @@ if [ "$FLAG_SERVER" = "false" ]; then
 fi
 
 # ------------- Get the Docker group ID
-DOCKER_GID=$(getent group docker | cut -d: -f3)
+DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
 if [ -z "$DOCKER_GID" ]; then
     echo "❌  Docker group not found."
     exit 1
 fi
 
 #export DOCKER_GID
-echo "🐳  Docker GID: $DOCKER_GID"
+echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
 
 
 INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
-## Resolve compose file: prefer repo root, fallback to sibling wazuh-docker
-#COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
-#if [[ "$CHOICE" == "agent" ]]; then
-#  COMPOSE_FILE="$REPO_ROOT/docker-compose-agent.yml"
-
-#fi
 
 #############################################################################################################
 ############################    Establecer vm.max_map_count  ################################################
@@ -145,7 +183,7 @@ if ! command -v docker >/dev/null 2>&1; then
     echo "❌  Error: docker is not installed or not in PATH."
     exit 1
 fi
-echo "✅  Docker ready: $(docker --version | cut -d' ' -f1-3)"
+echo "✅  Docker ready: ${GREEN}$(docker --version | cut -d' ' -f1-3)${NC}"
 
 #--------------- curl -------------------
 if ! command -v curl &> /dev/null; then
@@ -153,7 +191,7 @@ if ! command -v curl &> /dev/null; then
   command -v apt-get &> /dev/null && apt-get update -qq && apt-get install -y -qq curl
 fi
 command -v curl &> /dev/null || { echo "❌  Error: curl is not installed or not in PATH."; exit 1; }
-echo "✅  curl ready: $(curl -V | head -n1 | cut -d' ' -f1-2)"
+echo "✅  curl ready: ${GREEN}$(curl -V | head -n1 | cut -d' ' -f1-2)${NC}"
 
 #--------------- apache utilities for htpasswd -------------------
 #if ! command -v htpasswd &> /dev/null; then
@@ -207,7 +245,7 @@ fi
 #------------ post-install script  ------------------
 if [ "$FLAG_SERVER" = "true" ]; then
  
-  SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+  SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 
 
   if [ -z "$SCRIPT_POST_INSTALL" ]; then
@@ -222,12 +260,20 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
   chmod +x $SCRIPT_POST_INSTALL
 fi
-#------------- Agent authentication password file ------------------------------
 
-if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
-    echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
+# ------- API data file for Wazuh dashboard ------------------------------
+API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
+if [ ! -f "$API_DATA" ]; then
+    echo "❌  Error: $API_DATA not found."
     exit 1
-  fi
+fi
+  echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
+
+#------------- Agent authentication password file ------------------------------
+if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
+  echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
+  exit 1
+fi
   echo -e "✅  Auth password file found."
 
 
@@ -235,51 +281,56 @@ if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
 ############################   get hostname for agent name  ################################################
 ############################################################################################################
 
-LOCAL_AGENT_HOSTNAME=$(grep '^LOCAL_AGENT_HOSTNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+LOCAL_AGENT_HOSTNAME=$(grep '^LOCAL_AGENT_HOSTNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+
+if [ -z "$LOCAL_AGENT_HOSTNAME" ]; then
+    echo "❌ Error: LOCAL_AGENT_HOSTNAME is not set in .env"
+    exit 1
+fi
 
 if [[ "$LOCAL_AGENT_HOSTNAME" == "localhost" ]]; then
     #---------- change to actual hostname ----------------
-    LOCAL_AGENT_HOSTNAME=$(hostname -f)
+    LOCAL_AGENT_HOSTNAME=$(hostname -f || true)
 fi
 
-echo -e "📝  Agent hostname to use: ${GREEN}$LOCAL_AGENT_HOSTNAME${NC}"
+echo -e "📝  Agent hostname to use: ${YELLOW}$LOCAL_AGENT_HOSTNAME${NC}"
 export LOCAL_AGENT_HOSTNAME
 
 #--------------- Setting up API users and passwords   -------------------
 
-#--------------- API_USERNAME and API_PASSWORD   -------------------
-API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
 
-if [ ! -f "$API_DATA" ]; then
-    echo "❌  Error: $API_DATA not found."
-    exit 1
-fi
-echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
-
-#SI NO EXISTE SE CREAN LAS VARIABLES ********************FALTA
-
-API_NEW_USERNAME=$(grep '^API_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
-API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
-
-#SE VALIDA QUE LA CONTRSEÑA NO TENGA $
-if [[ "$API_NEW_PASSWORD" == *'$'* ]]; then
-    echo "❌  Error: Character \"\$\" it is not allowed on API_PASSWORD."
-    exit 1
-fi
-if [[ "$API_NEW_USERNAME" == *'$'* ]]; then
-    echo "❌  Error: Character \"\$\" it is not allowed on API_USERNAME."
+API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+if [ -z "$API_NEW_PASSWORD" ]; then
+    echo "❌ Error: API_PASSWORD is not set in .env"
     exit 1
 fi
 
-sed -i "s|^\([[:space:]]*username:[[:space:]]*\).*|\1$API_NEW_USERNAME|" "$API_DATA"
+# ----- Password validation
+if ! validate_password "$API_NEW_PASSWORD" "API_PASSWORD"; then
+    exit 1
+fi
+
 sed -i "s|^\([[:space:]]*password:[[:space:]]*\).*|\1$API_NEW_PASSWORD|" "$API_DATA"
 
-echo -e "✅  API data file updated with credentials defined on .env: ${YELLOW}$API_NEW_USERNAME:API_PASSWORD${NC}"
+echo -e "✅  API data file updated with credentials defined on .env file"
 
 #--------------- NEW USER DEFINED BY MY_USERNAME AND MY_PASSWORD  -------------------
 
-MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
-MY_PASSWORD=$(grep '^MY_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
+MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+if [ -z "$MY_USERNAME" ]; then
+    echo "❌ Error: MY_USERNAME is not set in .env"
+    exit 1
+fi
+MY_PASSWORD=$(grep '^MY_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+if [ -z "$MY_PASSWORD" ]; then
+    echo "❌ Error: MY_PASSWORD is not set in .env"
+    exit 1
+fi
+if [[ "$MY_PASSWORD" == *['$|&\']* ]]; then
+    echo "❌  Error: Character (\$, |, &, \\) it is not allowed on MY_PASSWORD."
+    exit 1
+fi
+
 MY_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$MY_PASSWORD")
 
 if grep -q "^[[:space:]]*${MY_USERNAME}:" "$INTERNAL_USERS_FILE"; then
@@ -303,27 +354,60 @@ fi
 # Copy GID
 sed -i "s|^\([[:space:]]*DOCKER_GID=[[:space:]]*\).*|\1$DOCKER_GID|" .env
 
+# -------Set new password for kibanauser  
+
+KIBANA_PASSWORD=$(grep '^DASHBOARD_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+if [ -z "$KIBANA_PASSWORD" ]; then
+    echo "❌ Error: DASHBOARD_PASSWORD is not set in .env"
+    exit 1
+fi
+
+if [[ "$KIBANA_PASSWORD" != kibanaserver ]]; then
+  # ------ Password validation
+  if ! validate_password "$KIBANA_PASSWORD" "DASHBOARD_PASSWORD"; then
+    exit 1
+  fi
+  KIBANA_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$KIBANA_PASSWORD")
+  if grep -q "^[[:space:]]*kibanaserver:" "$INTERNAL_USERS_FILE"; then
+    sed -i "/^[[:space:]]*kibanaserver:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${KIBANA_HASH}\"#" "$INTERNAL_USERS_FILE"
+    echo -e "✅  Password updated for user ${YELLOW}kibanaserver${NC}"
+  else
+    echo -e "❌ ERROR: Kibanaserver user not found."
+    exit 1
+  fi
+else
+  echo -e "⚠️  Warning: the Kibana/dashboard password is still the default '${YELLOW}kibanaserver${NC}'. Please change it in .env."
+fi
+
+#exit 1
 #########################################################################################################
-#####################    Generate self-signed certificates  #############################################
+#####################    COPY AGENT AUTH PASS TO RESPECTIVE FILE  #######################################
 #########################################################################################################
+AGENT_AUTH_PASSWORD=$(grep '^AGENT_AUTH_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+if [ -z "$AGENT_AUTH_PASSWORD" ]; then
+    echo "❌ Error: AGENT_AUTH_PASSWORD is not set in .env"
+    exit 1
+fi
+# ------- Password validation 
+if ! validate_password "$AGENT_AUTH_PASSWORD" "AGENT_AUTH_PASSWORD"; then
+    exit 1
+fi
+
+echo -n "$AGENT_AUTH_PASSWORD" > $AGENT_AUTH_PASSWORD_FILE
+
+# ------ Create Wazuh group and set permissions for the agent authentication password file
+#groupadd -r wazuh 2>/dev/null || true
+#chmod 640 $AGENT_AUTH_PASSWORD_FILE
+#chown root:wazuh $AGENT_AUTH_PASSWORD_FILE
+echo -e "✅  Agent authentication password saved to: ${GREEN}$AGENT_AUTH_PASSWORD_FILE${NC}"
+
+# ------ Generate self-signed certificates  
+
 if [ "$FLAG_SERVER" = "true" ]; then
   echo "🔐  Generating self-signed certificates..."
   docker compose -f generate-indexer-certs.yml run --rm generator
   echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
 fi
-#exit 1
-#########################################################################################################
-#####################    COPY AGENT AUTH PASS TO RESPECTIVE FILE  #######################################
-#########################################################################################################
-AGENT_AUTH_PASSWORD=$(grep '^AGENT_AUTH_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')
-
-echo -n "$AGENT_AUTH_PASSWORD" > $AGENT_AUTH_PASSWORD_FILE
-
-# ------ Create Wazuh group and set permissions for the agent authentication password file
-groupadd -r wazuh 2>/dev/null || true
-chmod 640 $AGENT_AUTH_PASSWORD_FILE
-chown root:wazuh $AGENT_AUTH_PASSWORD_FILE
-echo -e "✅  Agent authentication password saved to: ${GREEN}$AGENT_AUTH_PASSWORD_FILE${NC}"
 
 #---------- Run the compose file ----------------
 echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
