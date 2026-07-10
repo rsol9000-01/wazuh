@@ -26,9 +26,9 @@ services:
       - ./config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
       - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
       - /etc/os-release:/etc/os-release:ro
-      - /var/log:/var/log
-      - /sys:/sys:ro
+      #- /sys:/sys:ro
       #- /etc:/host/etc:ro
       #- /var/run:/var/run
       #- /sys:/sys:ro

@@ -18,7 +18,7 @@ admin:
   description: "Demo admin user"
 
 kibanaserver:
-  hash: "$2y$12$e9Z4h/Xzen19uuT.cCmlQeRXAFGDq1fTVNwKJUdWSfHdPqyUVAlJK"
+  hash: "$2y$12$236LaiBZW3dJfO.2UzinEOXY7wdECDKfpLQMmDc6o0FZYl7OtkDgq"
   reserved: true
   description: "Demo kibanaserver user"
 
@@ -56,7 +56,7 @@ snapshotrestore:
   description: "Demo snapshotrestore user"
 
 tfgadmin:
-  hash: "$2y$12$VfuigOXS9ufwMlUsvh74/.0G9V8UoDXFaYKDRBysVK./N0kdFMUEa"
+  hash: "$2y$12$rP/f6kYcvQGCI9gtg7WNousWqoQcey1LX8SEcQRmXfpwyqfbuGYra"
   reserved: false
   backend_roles:
     - "admin"

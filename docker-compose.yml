@@ -203,11 +203,9 @@ services:
       - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
       #- /etc/os-release:/etc/os-release:ro
-      - /var/log:/var/log
-      #- /etc:/host/etc:ro
-      #- /var/run:/var/run
-      #- /sys:/sys:ro
-      #- /proc:/proc:ro
+      - /var/log:/var/log:ro
+      # - /etc:/host/etc:ro                     # opcional, para FIM del host
+      # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
     entrypoint: ["/init_01.sh"]
 
     #depends_on:
