@@ -176,7 +176,7 @@ services:
     build:
       context: ./agent
       dockerfile: Dockerfile
-    image: simovilab/wazuh-agent-docker:4.14.5
+    image: wazuh/wazuh-agent-docker:4.14.5
     restart: always
     container_name: wazuh.agent
     hostname: $LOCAL_AGENT_HOSTNAME
