@@ -142,17 +142,6 @@ if [ "$FLAG_SERVER" = "false" ]; then
   COMPOSE_FILE="agent/docker-compose-agent.yml"
 fi
 
-# ------------- Get the Docker group ID
-DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
-if [ -z "$DOCKER_GID" ]; then
-    echo "❌  Docker group not found."
-    exit 1
-fi
-
-#export DOCKER_GID
-echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
-
-
 INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
 
 #############################################################################################################
@@ -184,6 +173,16 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 echo "✅  Docker ready: ${GREEN}$(docker --version | cut -d' ' -f1-3)${NC}"
+
+# ------------- Get the Docker group ID
+DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
+if [ -z "$DOCKER_GID" ]; then
+    echo "❌  Docker group not found."
+    exit 1
+fi
+
+#export DOCKER_GID
+echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
 
 #--------------- curl -------------------
 if ! command -v curl &> /dev/null; then
