@@ -142,36 +142,30 @@ if [ "$FLAG_SERVER" = "false" ]; then
   COMPOSE_FILE="agent/docker-compose-agent.yml"
 fi
 
-# ------------- Get the Docker group ID
-DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
-if [ -z "$DOCKER_GID" ]; then
-    echo "❌  Docker group not found."
-    exit 1
-fi
-
-#export DOCKER_GID
-echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
-
 
 INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
 
 #############################################################################################################
-############################    Establecer vm.max_map_count  ################################################
+#######################   Establecer vm.max_map_count server mode only  #####################################
 #############################################################################################################
 
-CURRENT=$(cat /proc/sys/vm/max_map_count)
-REQUIRED=262144
+if [ "$FLAG_SERVER" = "true" ]; then
+  CURRENT=$(cat /proc/sys/vm/max_map_count)
+  REQUIRED=262144
 
-echo -e "💾  Current vm.max_map_count: ${GREEN}$CURRENT${NC}"
+  echo -e "💾  Current vm.max_map_count: ${GREEN}$CURRENT${NC}"
 
-if [ "$CURRENT" -lt "$REQUIRED" ]; then
-    echo "   - 🔧 Setting vm.max_map_count to $REQUIRED..."
-    sysctl -w vm.max_map_count=$REQUIRED
-    echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
-    sysctl -p
+  if [ "$CURRENT" -lt "$REQUIRED" ]; then
+      echo "   - 🔧 Setting vm.max_map_count to $REQUIRED..."
+      sysctl -w vm.max_map_count=$REQUIRED
+      echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
+      sysctl -p
+  else
+      echo "    - ✅ vm.max_map_count already satisfies the requirement."
+  fi
 else
-    echo "    - ✅ vm.max_map_count already satisfies the requirement."
-fi
+  echo "💾  Skipping vm.max_map_count check for agent deployment."
+fi  
 
 #######################################################################################################
 ####################################    Check dependencies  #################################################
@@ -183,15 +177,27 @@ if ! command -v docker >/dev/null 2>&1; then
     echo "❌  Error: docker is not installed or not in PATH."
     exit 1
 fi
-echo "✅  Docker ready: ${GREEN}$(docker --version | cut -d' ' -f1-3)${NC}"
+echo -e "✅  Docker ready: ${GREEN}$(docker --version | cut -d' ' -f1-3)${NC}"
 
-#--------------- curl -------------------
-if ! command -v curl &> /dev/null; then
-  echo "🔧  Installing curl..."
-  command -v apt-get &> /dev/null && apt-get update -qq && apt-get install -y -qq curl
+# ------------- Get the Docker group ID
+DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
+if [ -z "$DOCKER_GID" ]; then
+    echo "❌  Docker group not found."
+    exit 1
 fi
-command -v curl &> /dev/null || { echo "❌  Error: curl is not installed or not in PATH."; exit 1; }
-echo "✅  curl ready: ${GREEN}$(curl -V | head -n1 | cut -d' ' -f1-2)${NC}"
+
+#export DOCKER_GID
+echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
+
+#--------------- curl, server mode only -------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  if ! command -v curl &> /dev/null; then
+    echo "🔧  Installing curl..."
+    command -v apt-get &> /dev/null && apt-get update -qq && apt-get install -y -qq curl
+  fi
+  command -v curl &> /dev/null || { echo "❌  Error: curl is not installed or not in PATH."; exit 1; }
+  echo -e "✅  curl ready: ${GREEN}$(curl -V | head -n1 | cut -d' ' -f1-2)${NC}"
+fi
 
 #--------------- apache utilities for htpasswd -------------------
 #if ! command -v htpasswd &> /dev/null; then
@@ -227,13 +233,16 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
 
-#--------------- Internal users file ------------------
-if [ ! -f "$INTERNAL_USERS_FILE" ]; then
-    echo "❌  Error: $INTERNAL_USERS_FILE not found."
-    exit 1
+#--------------- Internal users file only server modo ------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  if [ ! -f "$INTERNAL_USERS_FILE" ]; then
+      echo "❌  Error: $INTERNAL_USERS_FILE not found."
+      exit 1
+  fi
+  echo -e "✅  Internal users file found: ${GREEN}$INTERNAL_USERS_FILE${NC}"
 fi
-echo -e "✅  Internal users file found: ${GREEN}$INTERNAL_USERS_FILE${NC}"
-#------------ generate-indexer-certs - server only ------------------
+
+#------------ generate-indexer-certs - server mode only ------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   if [ ! -f "$CERTS_FILE" ]; then
@@ -242,32 +251,31 @@ if [ "$FLAG_SERVER" = "true" ]; then
   fi
   echo -e "✅  Certs file found: ${GREEN}$CERTS_FILE${NC}"
 fi
-#------------ post-install script  ------------------
-if [ "$FLAG_SERVER" = "true" ]; then
- 
-  SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+#------------ post-install script ------------------
 
+SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 
-  if [ -z "$SCRIPT_POST_INSTALL" ]; then
-      echo "❌ Error: SCRIPT_POST_INSTALL is not set in .env"
-      exit 1
-  fi
-   
-  if [ ! -f "$SCRIPT_POST_INSTALL" ]; then
-    echo "❌  Error: $SCRIPT_POST_INSTALL not found."
+if [ -z "$SCRIPT_POST_INSTALL" ]; then
+    echo "❌ Error: SCRIPT_POST_INSTALL is not set in .env"
     exit 1
-  fi
-  echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
-  chmod +x $SCRIPT_POST_INSTALL
 fi
+   
+if [ ! -f "$SCRIPT_POST_INSTALL" ]; then
+  echo "❌  Error: $SCRIPT_POST_INSTALL not found."
+  exit 1
+fi
+echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
+chmod +x $SCRIPT_POST_INSTALL
 
-# ------- API data file for Wazuh dashboard ------------------------------
-API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
-if [ ! -f "$API_DATA" ]; then
+# ------- API data file for Wazuh dashboard - server mode only ------------------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
+  if [ ! -f "$API_DATA" ]; then
     echo "❌  Error: $API_DATA not found."
     exit 1
+  fi
+    echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
 fi
-  echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
 
 #------------- Agent authentication password file ------------------------------
 if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
@@ -296,50 +304,50 @@ fi
 echo -e "📝  Agent hostname to use: ${YELLOW}$LOCAL_AGENT_HOSTNAME${NC}"
 export LOCAL_AGENT_HOSTNAME
 
-#--------------- Setting up API users and passwords   -------------------
+#--------------- Setting up API users and passwords- server mode only  -------------------
 
-
-API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
-if [ -z "$API_NEW_PASSWORD" ]; then
+if [ "$FLAG_SERVER" = "true" ]; then
+  API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$API_NEW_PASSWORD" ]; then
     echo "❌ Error: API_PASSWORD is not set in .env"
     exit 1
-fi
-
+  fi
 # ----- Password validation
-if ! validate_password "$API_NEW_PASSWORD" "API_PASSWORD"; then
+  if ! validate_password "$API_NEW_PASSWORD" "API_PASSWORD"; then
     exit 1
+  fi
+
+  sed -i "s|^\([[:space:]]*password:[[:space:]]*\).*|\1$API_NEW_PASSWORD|" "$API_DATA"
+
+  echo -e "✅  API data file updated with credentials defined on .env file"
 fi
 
-sed -i "s|^\([[:space:]]*password:[[:space:]]*\).*|\1$API_NEW_PASSWORD|" "$API_DATA"
-
-echo -e "✅  API data file updated with credentials defined on .env file"
 
 #--------------- NEW USER DEFINED BY MY_USERNAME AND MY_PASSWORD  -------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$MY_USERNAME" ]; then
+      echo "❌ Error: MY_USERNAME is not set in .env"
+      exit 1
+  fi
+  MY_PASSWORD=$(grep '^MY_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$MY_PASSWORD" ]; then
+      echo "❌ Error: MY_PASSWORD is not set in .env"
+      exit 1
+  fi
+  if [[ "$MY_PASSWORD" == *['$|&\']* ]]; then
+      echo "❌  Error: Character (\$, |, &, \\) it is not allowed on MY_PASSWORD."
+      exit 1
+  fi
 
-MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
-if [ -z "$MY_USERNAME" ]; then
-    echo "❌ Error: MY_USERNAME is not set in .env"
-    exit 1
-fi
-MY_PASSWORD=$(grep '^MY_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
-if [ -z "$MY_PASSWORD" ]; then
-    echo "❌ Error: MY_PASSWORD is not set in .env"
-    exit 1
-fi
-if [[ "$MY_PASSWORD" == *['$|&\']* ]]; then
-    echo "❌  Error: Character (\$, |, &, \\) it is not allowed on MY_PASSWORD."
-    exit 1
-fi
+  MY_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$MY_PASSWORD")
 
-MY_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$MY_PASSWORD")
-
-if grep -q "^[[:space:]]*${MY_USERNAME}:" "$INTERNAL_USERS_FILE"; then
-    #sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s/^[[:space:]]*hash:.*/  hash: \"${MY_HASH}\"/" "$INTERNAL_USERS_FILE"
-    sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${MY_HASH}\"#" "$INTERNAL_USERS_FILE"
-    
-    echo -e "✅  Password updated for user ${YELLOW}$MY_USERNAME${NC}"
-else
-    cat >> "$INTERNAL_USERS_FILE" <<EOF
+  if grep -q "^[[:space:]]*${MY_USERNAME}:" "$INTERNAL_USERS_FILE"; then
+      #sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s/^[[:space:]]*hash:.*/  hash: \"${MY_HASH}\"/" "$INTERNAL_USERS_FILE"
+      sed -i "/^[[:space:]]*${MY_USERNAME}:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${MY_HASH}\"#" "$INTERNAL_USERS_FILE"
+      echo -e "✅  Password updated for user ${YELLOW}$MY_USERNAME${NC}"
+  else
+      cat >> "$INTERNAL_USERS_FILE" <<EOF
 
 ${MY_USERNAME}:
   hash: "${MY_HASH}"
@@ -348,37 +356,39 @@ ${MY_USERNAME}:
     - "admin"
   description: "Usuario administrador nuevo"
 EOF
-echo "✅  New user created with credentials defined on .env: $MY_USERNAME:MY_PASSWORD"
-fi
 
-# Copy GID
+    echo "✅  New user created with credentials defined on .env: $MY_USERNAME:MY_PASSWORD"
+  fi
+fi
+# ------ Copy GID
 sed -i "s|^\([[:space:]]*DOCKER_GID=[[:space:]]*\).*|\1$DOCKER_GID|" .env
 
-# -------Set new password for kibanauser  
+# -------Set new password for kibanauser - server mode only
 
-KIBANA_PASSWORD=$(grep '^DASHBOARD_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
-if [ -z "$KIBANA_PASSWORD" ]; then
-    echo "❌ Error: DASHBOARD_PASSWORD is not set in .env"
-    exit 1
-fi
-
-if [[ "$KIBANA_PASSWORD" != kibanaserver ]]; then
-  # ------ Password validation
-  if ! validate_password "$KIBANA_PASSWORD" "DASHBOARD_PASSWORD"; then
-    exit 1
+if [ "$FLAG_SERVER" = "true" ]; then
+  KIBANA_PASSWORD=$(grep '^DASHBOARD_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$KIBANA_PASSWORD" ]; then
+      echo "❌ Error: DASHBOARD_PASSWORD is not set in .env"
+      exit 1
   fi
-  KIBANA_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$KIBANA_PASSWORD")
-  if grep -q "^[[:space:]]*kibanaserver:" "$INTERNAL_USERS_FILE"; then
-    sed -i "/^[[:space:]]*kibanaserver:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${KIBANA_HASH}\"#" "$INTERNAL_USERS_FILE"
-    echo -e "✅  Password updated for user ${YELLOW}kibanaserver${NC}"
+
+  if [[ "$KIBANA_PASSWORD" != kibanaserver ]]; then
+    # ------ Password validation
+    if ! validate_password "$KIBANA_PASSWORD" "DASHBOARD_PASSWORD"; then
+      exit 1
+    fi
+    KIBANA_HASH=$(docker run --rm wazuh/wazuh-indexer:4.14.5 /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$KIBANA_PASSWORD")
+    if grep -q "^[[:space:]]*kibanaserver:" "$INTERNAL_USERS_FILE"; then
+      sed -i "/^[[:space:]]*kibanaserver:/,/^[[:space:]]*[^[:space:]]/ s#^[[:space:]]*hash:.*#  hash: \"${KIBANA_HASH}\"#" "$INTERNAL_USERS_FILE"
+      echo -e "✅  Password updated for user ${YELLOW}kibanaserver${NC}"
+    else
+      echo -e "❌ ERROR: Kibanaserver user not found."
+      exit 1
+    fi
   else
-    echo -e "❌ ERROR: Kibanaserver user not found."
-    exit 1
+    echo -e "⚠️  Warning: the Kibana/dashboard password is still the default '${YELLOW}kibanaserver${NC}'. Please change it in .env."
   fi
-else
-  echo -e "⚠️  Warning: the Kibana/dashboard password is still the default '${YELLOW}kibanaserver${NC}'. Please change it in .env."
 fi
-
 #exit 1
 #########################################################################################################
 #####################    COPY AGENT AUTH PASS TO RESPECTIVE FILE  #######################################
