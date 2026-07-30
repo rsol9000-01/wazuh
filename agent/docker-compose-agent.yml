@@ -1,6 +1,10 @@
 services:
   wazuh.agent:
-    image: wazuh/wazuh-agent:4.14.5
+    #image: wazuh/wazuh-agent:4.14.5
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: simovilab/wazuh-agent-docker:4.14.5
     restart: always
     container_name: wazuh.agent
     hostname: $LOCAL_AGENT_HOSTNAME
@@ -17,14 +21,14 @@ services:
     group_add:
       - "${DOCKER_GID}"
     environment:
-      - WAZUH_MANAGER_SERVER=${AGENT_MANAGER_SERVER}
+      - WAZUH_MANAGER_SERVER=${REMOTE_AGENT_MANAGER_SERVER}
       #- WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}
     volumes:
-      - ./${SCRIPT_POST_INSTALL}:/init_01.sh:ro
-      - ./config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
-      - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
+      - ../${SCRIPT_POST_INSTALL}:/init_01.sh:ro
+      - ../config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
+      - ./conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
       - /etc/os-release:/etc/os-release:ro
@@ -36,6 +40,6 @@ services:
       #- /proc:/proc:ro
       #- /dev:/dev:ro
       #- /proc/meminfo:/host_proc_meminfo:ro
-    entrypoint: ["/init_01.sh"]
+    entrypoint: ["/init_01.sh", "${REMOTE_AGENT_MANAGER_SERVER}"]
     #depends_on:
     #  - wazuh.manager 
