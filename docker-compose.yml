@@ -115,9 +115,9 @@ services:
       timeout: 10s
       retries: 10
       
-    #depends_on:
-    #  wazuh.indexer:
-    #    condition: service_healthy
+    depends_on:
+      wazuh.indexer:
+        condition: service_healthy
   wazuh.dashboard:
     container_name: wazuh.dashboard
     image: wazuh/wazuh-dashboard:4.14.5
@@ -162,14 +162,26 @@ services:
       timeout: 10s
       retries: 10
 
-    #depends_on:
-    #  wazuh.indexer:
-    #    condition: service_healthy
-    #  wazuh.manager:
-    #    condition: service_healthy
-    #links:
-    #  - wazuh.indexer:wazuh.indexer
-    #  - wazuh.manager:wazuh.manager
+    depends_on:
+      wazuh.indexer:
+        condition: service_healthy
+      wazuh.manager:
+        condition: service_healthy
+    
+  ##########################
+  # INIT CONTAINER
+  ###########################
+  wazuh-init:
+    image: alpine/curl:latest
+    env_file: .env
+    volumes:
+      - ./${CONFIG_SERVER_SCRIPT}:/init.sh:ro
+    entrypoint: ["sh", "-c", "apk add --no-cache bash && exec bash /init.sh"]
+    depends_on:
+      wazuh.manager:
+        condition: service_completed_successfully
+    #
+    # restart: "no" # solo corre una vez y sale
 
   wazuh.agent:
     #image: wazuh/wazuh-agent:4.14.5
@@ -198,7 +210,7 @@ services:
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}
     volumes:
-      - ./${SCRIPT_POST_INSTALL}:/init_01.sh:ro
+      - ./${CONFIG_AGENT_SCRIPT}:/init_01.sh:ro
       - ./config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
       - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -208,27 +220,10 @@ services:
       # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
     entrypoint: ["/init_01.sh"]
 
-    #depends_on:
-    #  wazuh.manager:
-    #    condition: service_healthy
-  ##########################
-  # INIT CONTAINER
-  ###########################
-  #wazuh-init:
-  # image: alpine/curl:latest
-  # env_file: .env
-  # volumes:
-  #   - ./${SCRIPT_POST_INSTALL}:/init.sh:ro
-  #   #- ./psk/wazuh_agentd.psk:/wazuh_agentd.psk:ro
-  #   #- ./scripts/wazuh-conf-en.sh:/init.sh:ro
-  # #entrypoint: ["bash", "/init.sh"]
-  # entrypoint: ["sh", "-c", "apk add --no-cache bash && exec bash /init.sh"]
-  # depends_on:
-  #   wazuh.dashboard:
-  #     condition: service_healthy
-  #
-  # restart: "no" # solo corre una vez y sale
-
+    depends_on:
+      wazuh.manager:
+        condition: service_healthy
+  
 volumes:
   wazuh_api_configuration:
   wazuh_etc:

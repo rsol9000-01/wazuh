@@ -26,7 +26,7 @@ services:
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}
     volumes:
-      - ../${SCRIPT_POST_INSTALL}:/init_01.sh:ro
+      - ../${CONFIG_AGENT_SCRIPT}:/init_01.sh:ro
       - ../config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass:ro
       - ./conf/ossec.conf:/var/ossec/etc/ossec.conf
       - /var/run/docker.sock:/var/run/docker.sock:ro

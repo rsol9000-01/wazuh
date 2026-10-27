@@ -1,0 +1,351 @@
+set -eu
+
+# ─────────────────────────────────────────────────────────────────────
+# Parámetros
+# ─────────────────────────────────────────────────────────────────────
+API="${API_URL:-https://wazuh-manager:55000}"
+USER="${API_USERNAME:-wazuh-wui}"
+PASS="${API_PASSWORD:?API_PASSWORD must be set in .env}"
+CA="${WAZUH_API_CA:-}"
+INSECURE="${WAZUH_API_INSECURE:-0}"
+
+# Ruta del despliegue de databus EN EL HOST. Ajustar si difiere.
+DATABUS_PATH="${DATABUS_PATH:-/opt/databus}"
+
+GROUPS="databus infobus monitoring"
+
+log()  { echo "[INFO] $*"; }
+warn() { echo "[WARN] $*" >&2; }
+die()  { echo "[ERROR] $*" >&2; exit 1; }
+
+# ─────────────────────────────────────────────────────────────────────
+# Proof for TLS or insecure mode. curl y jq son necesarios para la API.
+# ─────────────────────────────────────────────────────────────────────
+command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || die "falta curl"; }
+command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || die "falta jq"; }
+
+CURL_TLS=""
+if [ -n "$CA" ]; then
+    [ -f "$CA" ] || die "WAZUH_API_CA apunta a un archivo inexistente: $CA"
+    CURL_TLS="--cacert $CA"
+elif [ "$INSECURE" = "1" ]; then
+    warn "TLS sin verificar (WAZUH_API_INSECURE=1). Aceptable solo en red interna."
+    CURL_TLS="-k"
+else
+    die "Defina WAZUH_API_CA con el CA del manager, o WAZUH_API_INSECURE=1 de forma explícita."
+fi
+
+# ─────────────────────────────────────────────────────────────────────
+# Esperar a que la API responda
+# ─────────────────────────────────────────────────────────────────────
+log "Esperando la API en ${API} ..."
+i=0
+until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
+    i=$((i + 1))
+    [ "$i" -ge 60 ] && die "la API no respondió en 300 s"
+    sleep 5
+done
+log "API disponible."
+
+# ─────────────────────────────────────────────────────────────────────
+# Autenticación. El JWT dura 900 s; se refresca antes del reinicio.
+# ─────────────────────────────────────────────────────────────────────
+authenticate() {
+    TOKEN=$(curl -s $CURL_TLS -u "${USER}:${PASS}" \
+            -X POST "${API}/security/user/authenticate?raw=true") \
+        || die "fallo al autenticar contra la API"
+    case "$TOKEN" in
+        ey*) : ;;
+        *)   die "credenciales rechazadas por la API (usuario ${USER})" ;;
+    esac
+}
+
+# api <método> <ruta> [content-type] [cuerpo]
+api() {
+    _m="$1"; _p="$2"; _ct="${3:-}"; _b="${4:-}"
+    if [ -n "$_ct" ]; then
+        curl -s $CURL_TLS -X "$_m" "${API}${_p}" \
+             -H "Authorization: Bearer ${TOKEN}" \
+             -H "Content-Type: ${_ct}" \
+             --data-binary "$_b"
+    else
+        curl -s $CURL_TLS -X "$_m" "${API}${_p}" \
+             -H "Authorization: Bearer ${TOKEN}"
+    fi
+}
+
+# Falla si la respuesta trae error distinto del "ya existe" que toleramos.
+check() {
+    _resp="$1"; _what="$2"; _tolerate="${3:-}"
+    _err=$(echo "$_resp" | jq -r '.error // 0')
+    if [ "$_err" != "0" ] && [ "$_err" != "null" ]; then
+        if [ -n "$_tolerate" ] && [ "$_err" = "$_tolerate" ]; then
+            log "  ${_what}: ya existía, sin cambios"
+            return 0
+        fi
+        warn "respuesta: $_resp"
+        die "${_what}: la API devolvió error ${_err}"
+    fi
+    log "  ${_what}: ok"
+}
+
+authenticate
+log "Autenticado como ${USER}."
+
+# ─────────────────────────────────────────────────────────────────────
+# 1. Grupos de agentes
+# ─────────────────────────────────────────────────────────────────────
+log "Creando grupos ..."
+for g in $GROUPS; do
+    r=$(api POST "/groups" "application/json" "{\"group_id\":\"${g}\"}")
+    check "$r" "grupo ${g}" 1711      # 1711 = el grupo ya existe
+done
+
+# ─────────────────────────────────────────────────────────────────────
+# 2. agent.conf del grupo databus (R3)
+#
+#    El <nodiff> no es opcional: sin él la alerta de FIM viaja al manager
+#    con el contenido del archivo, y SECRET_KEY, DB_PASSWORD, RABBITMQ_PASS
+#    y API_TOKEN quedarían en claro en el log de alertas.
+# ─────────────────────────────────────────────────────────────────────
+log "Subiendo agent.conf del grupo databus ..."
+AGENT_CONF_DATABUS=$(cat <<XML
+<agent_config>
+
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/lib/docker/containers/*/*-json.log</location>
+  </localfile>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <scan_on_start>yes</scan_on_start>
+
+    <directories check_all="yes" realtime="yes">${DATABUS_PATH}</directories>
+    <directories check_all="yes" realtime="yes">/var/lib/docker/volumes/databus_feed_files/_data</directories>
+    <directories check_all="yes" realtime="yes">/etc/systemd</directories>
+    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
+
+    <nodiff>${DATABUS_PATH}/.env</nodiff>
+    <nodiff>${DATABUS_PATH}/.env.prod</nodiff>
+
+    <ignore type="sregex">\.log$|\.tmp$|/__pycache__/</ignore>
+  </syscheck>
+
+</agent_config>
+XML
+)
+r=$(api PUT "/groups/databus/configuration" "application/octet-stream" "$AGENT_CONF_DATABUS")
+check "$r" "agent.conf de databus"
+
+# ─────────────────────────────────────────────────────────────────────
+# 3. agent.conf del grupo infobus (R2)
+# ─────────────────────────────────────────────────────────────────────
+log "Subiendo agent.conf del grupo infobus ..."
+AGENT_CONF_INFOBUS=$(cat <<'XML'
+<agent_config>
+
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/lib/docker/containers/*/*-json.log</location>
+  </localfile>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <scan_on_start>yes</scan_on_start>
+    <directories check_all="yes" realtime="yes">/etc/systemd</directories>
+    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
+    <ignore type="sregex">\.log$|\.tmp$|/__pycache__/</ignore>
+  </syscheck>
+
+</agent_config>
+XML
+)
+r=$(api PUT "/groups/infobus/configuration" "application/octet-stream" "$AGENT_CONF_INFOBUS")
+check "$r" "agent.conf de infobus"
+
+# ─────────────────────────────────────────────────────────────────────
+# 4. agent.conf del grupo monitoring (R4, host propio)
+#    Es el único con una fuente que trae srcip, así que es donde la
+#    respuesta activa se puede demostrar de verdad.
+# ─────────────────────────────────────────────────────────────────────
+log "Subiendo agent.conf del grupo monitoring ..."
+AGENT_CONF_MONITORING=$(cat <<'XML'
+<agent_config>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <scan_on_start>yes</scan_on_start>
+    <directories check_all="yes" realtime="yes">/etc</directories>
+    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
+    <ignore>/etc/mtab</ignore>
+    <ignore>/etc/resolv.conf</ignore>
+    <ignore type="sregex">\.log$|\.tmp$</ignore>
+  </syscheck>
+
+</agent_config>
+XML
+)
+r=$(api PUT "/groups/monitoring/configuration" "application/octet-stream" "$AGENT_CONF_MONITORING")
+check "$r" "agent.conf de monitoring"
+
+# ─────────────────────────────────────────────────────────────────────
+# 5. Reglas propias del proyecto (rango 100100–100199)
+# ─────────────────────────────────────────────────────────────────────
+log "Subiendo local_rules.xml ..."
+LOCAL_RULES=$(cat <<'XML'
+<!--
+  Reglas del TFG — monitoreo de databus/infobus (simovilab, UCR).
+  Cada regla corresponde a un hallazgo documentado en 7.3.1 del machote.
+  Rango reservado para reglas propias: 100000+.
+-->
+
+<group name="simovilab,databus,">
+
+  <rule id="100100" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="stream">stdout|stderr</field>
+    <description>Linea de log de contenedor Docker</description>
+  </rule>
+
+  <!-- R1 · Fallo de importacion del GTFS — H11 -->
+  <rule id="100101" level="10">
+    <if_sid>100100</if_sid>
+    <field name="log">GTFS Schedule bootstrap failed|Import failed for provider|IntegrityError</field>
+    <description>databus: fallo al importar el GTFS Schedule</description>
+    <group>gtfs_integrity,</group>
+  </rule>
+
+  <!-- R2 · Host HTTP rechazado — H12 -->
+  <rule id="100102" level="8">
+    <if_sid>100100</if_sid>
+    <field name="log">DisallowedHost|Invalid HTTP_HOST header</field>
+    <description>databus: peticion rechazada por ALLOWED_HOSTS</description>
+    <group>recon,</group>
+  </rule>
+
+  <rule id="100103" level="12" frequency="8" timeframe="120">
+    <if_matched_sid>100102</if_matched_sid>
+    <description>databus: barrido de nombres de host, 8 rechazos en 120 s</description>
+    <group>recon,</group>
+  </rule>
+
+  <!-- R3 · Error 5xx de la aplicacion -->
+  <rule id="100104" level="7">
+    <if_sid>100100</if_sid>
+    <field name="log">Internal Server Error:</field>
+    <description>databus: respuesta 5xx de Django</description>
+  </rule>
+
+  <!-- R4 · Enumeracion de rutas -->
+  <rule id="100105" level="3">
+    <if_sid>100100</if_sid>
+    <field name="log">Not Found: </field>
+    <description>databus: 404</description>
+  </rule>
+
+  <rule id="100106" level="10" frequency="20" timeframe="60">
+    <if_matched_sid>100105</if_matched_sid>
+    <description>databus: rafaga de 404, enumeracion de rutas</description>
+    <group>recon,</group>
+  </rule>
+
+  <!-- R5 · Autenticacion fallida en Redis -->
+  <rule id="100107" level="9">
+    <if_sid>100100</if_sid>
+    <field name="log">WRONGPASS|NOAUTH</field>
+    <description>databus: autenticacion fallida contra Redis</description>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!-- R6 · Reintento infinito en el flujo de eventos — H9 (infobus) -->
+  <rule id="100108" level="7" frequency="5" timeframe="300">
+    <if_sid>100100</if_sid>
+    <field name="log">Failed to process update event</field>
+    <description>infobus: evento reprocesado sin limite, sin dead-letter</description>
+  </rule>
+
+  <!-- R7 · Codigo clonado desde la red en arranque — H15 -->
+  <rule id="100109" level="6">
+    <if_sid>100100</if_sid>
+    <field name="log">Cloning gtfs-\w+ repository</field>
+    <description>databus: codigo clonado desde GitHub en arranque en frio</description>
+    <group>supply_chain,</group>
+  </rule>
+
+</group>
+
+
+<group name="simovilab,syscheck,">
+
+  <!-- R8 · Cambio en configuracion o secretos -->
+  <rule id="100120" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">/\.env$|/\.env\.prod$|compose\.prod\.yml$</field>
+    <description>databus: cambio en configuracion o secretos del despliegue</description>
+  </rule>
+
+  <!-- R9 · Cambio en el GTFS publicado — RNF de integridad -->
+  <rule id="100121" level="10">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">databus_feed_files</field>
+    <description>databus: cambio en el GTFS Schedule publicado</description>
+    <group>gtfs_integrity,</group>
+  </rule>
+
+  <!-- R10 · Socket de Docker — riesgo aceptado de 7.11 -->
+  <rule id="100122" level="12">
+    <if_sid>550,554</if_sid>
+    <field name="file">/var/run/docker\.sock</field>
+    <description>Cambio en el socket de Docker</description>
+  </rule>
+
+</group>
+XML
+)
+r=$(api PUT "/rules/files/local_rules.xml?overwrite=true" "application/octet-stream" "$LOCAL_RULES")
+check "$r" "local_rules.xml"
+
+# ─────────────────────────────────────────────────────────────────────
+# 6. Validar ANTES de reiniciar. Un XML malo deja el manager caído.
+# ─────────────────────────────────────────────────────────────────────
+log "Validando la configuración del manager ..."
+r=$(api GET "/manager/configuration/validation")
+status=$(echo "$r" | jq -r '.data.affected_items[0].status // "unknown"')
+if [ "$status" != "OK" ]; then
+    echo "$r" | jq -r '.data.affected_items[0].details[]?' >&2 || true
+    die "la configuración no valida; NO se reinicia el manager"
+fi
+log "  configuración válida."
+
+# ─────────────────────────────────────────────────────────────────────
+# 7. Reiniciar el manager y esperar a que vuelva
+# ─────────────────────────────────────────────────────────────────────
+authenticate          # el JWT pudo expirar durante los pasos anteriores
+log "Reiniciando el manager ..."
+r=$(api PUT "/manager/restart")
+check "$r" "reinicio del manager"
+
+sleep 10
+i=0
+until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
+    i=$((i + 1))
+    [ "$i" -ge 36 ] && die "el manager no volvió en 180 s tras el reinicio"
+    sleep 5
+done
+
+# ─────────────────────────────────────────────────────────────────────
+# 8. Resumen
+# ─────────────────────────────────────────────────────────────────────
+authenticate
+log "Grupos existentes:"
+api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agentes: \(.count))"'
+
+log "Listo. El manager acepta registros; los agentes pueden enrolarse con:"
+log "  R3 -> grupo 'databus'   R2 -> grupo 'infobus'   R4 -> grupo 'monitoring'"
+exit 0
