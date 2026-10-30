@@ -26,6 +26,7 @@ services:
       - WAZUH_AGENT_GROUP=${REMOTE_AGENT_GROUP}
       #- WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
+      - PROJECT_PATH=${PROJECT_PATH}
       - TZ=${TZ}
     volumes:
       - ../${CONFIG_AGENT_SCRIPT}:/init_01.sh:ro
@@ -33,7 +34,7 @@ services:
       - ../config/wazuh_cluster/authd.pass:/opt/authd.pass:ro
       - ./conf/ossec.conf:/opt/ossec.conf.tpl:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ${DATABUS_PATH}:${DATABUS_PATH}:ro
+      - ${PROJECT_PATH}:${PROJECT_PATH}:ro
       - /var/lib/docker/volumes/databus_feed_files/_data:/var/lib/docker/volumes/databus_feed_files/_data:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro

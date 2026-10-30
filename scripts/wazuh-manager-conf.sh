@@ -38,8 +38,11 @@ USER="${WAZUH_API_USER:-wazuh-wui}"
 PASS="${WAZUH_API_PASSWORD:?WAZUH_API_PASSWORD must be set in .env}"
 INSECURE="${WAZUH_API_INSECURE:-0}"
 
-# Ruta del despliegue de databus EN EL HOST. Ajustar si difiere.
-DATABUS_PATH="${DATABUS_PATH:-/opt/databus}"
+# Ruta del despliegue EN EL HOST. Ajustar si difiere.
+DATABUS_PATH="${DATABUS_PATH:-/home/databus}"
+INFOBUS_PATH="${INFOBUS_PATH:-/home/infobus}"
+WAZUH_PATH="${WAZUH_PATH:-/home/wazuh}"
+ZABBIX_PATH="${ZABBIX_PATH:-/home/zabbix}"
 
 AGENT_GROUPS="databus infobus monitoring"
 
@@ -151,12 +154,10 @@ AGENT_CONF_DATABUS=$(cat <<XML
 
     <directories check_all="yes" realtime="yes">${DATABUS_PATH}</directories>
     <directories check_all="yes" realtime="yes">/var/lib/docker/volumes/databus_feed_files/_data</directories>
-    <directories check_all="yes" realtime="yes">/etc/systemd</directories>
-    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
 
     <nodiff>${DATABUS_PATH}/.env</nodiff>
     <nodiff>${DATABUS_PATH}/.env.prod</nodiff>
-
+    <ignore>${DATABUS_PATH}/.git</ignore>
     <ignore type="sregex">\.log$|\.tmp$|/__pycache__/</ignore>
   </syscheck>
 
@@ -170,7 +171,7 @@ check "$r" "agent.conf de databus"
 # 3. agent.conf del grupo infobus (R2)
 # ─────────────────────────────────────────────────────────────────────
 log "Subiendo agent.conf del grupo infobus ..."
-AGENT_CONF_INFOBUS=$(cat <<'XML'
+AGENT_CONF_INFOBUS=$(cat <<XML
 <agent_config>
 
   <localfile>
@@ -181,9 +182,14 @@ AGENT_CONF_INFOBUS=$(cat <<'XML'
   <syscheck>
     <disabled>no</disabled>
     <scan_on_start>yes</scan_on_start>
-    <directories check_all="yes" realtime="yes">/etc/systemd</directories>
-    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
-    <ignore type="sregex">\.log$|\.tmp$|/__pycache__/</ignore>
+
+    <directories check_all="yes" realtime="yes">${INFOBUS_PATH}</directories>
+
+    <nodiff>${INFOBUS_PATH}/.env</nodiff>
+    <nodiff>${INFOBUS_PATH}/.env.prod</nodiff>
+
+    <ignore>${INFOBUS_PATH}/.git</ignore>
+    <ignore type="sregex">\\.log\$|\\.tmp\$|/__pycache__/</ignore>
   </syscheck>
 
 </agent_config>
@@ -198,22 +204,38 @@ check "$r" "agent.conf de infobus"
 #    respuesta activa se puede demostrar de verdad.
 # ─────────────────────────────────────────────────────────────────────
 log "Subiendo agent.conf del grupo monitoring ..."
-AGENT_CONF_MONITORING=$(cat <<'XML'
+AGENT_CONF_MONITORING=$(cat <<XML
 <agent_config>
 
+  <!-- Unica fuente del proyecto que trae srcip: es donde la respuesta
+       activa se puede demostrar. -->
   <localfile>
     <log_format>syslog</log_format>
     <location>/var/log/auth.log</location>
   </localfile>
 
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/lib/docker/containers/*/*-json.log</location>
+  </localfile>
+
+  <!-- Integridad de la configuracion del propio sistema de monitoreo.
+       Los .env de ambos stacks concentran todas las credenciales. -->
   <syscheck>
     <disabled>no</disabled>
     <scan_on_start>yes</scan_on_start>
-    <directories check_all="yes" realtime="yes">/etc</directories>
-    <directories check_all="yes">/usr/bin,/usr/sbin</directories>
-    <ignore>/etc/mtab</ignore>
-    <ignore>/etc/resolv.conf</ignore>
-    <ignore type="sregex">\.log$|\.tmp$</ignore>
+
+    <directories check_all="yes" realtime="yes">${WAZUH_PATH}</directories>
+    <directories check_all="yes" realtime="yes">${ZABBIX_PATH}</directories>
+
+    <nodiff>${WAZUH_PATH}/.env</nodiff>
+    <nodiff>${ZABBIX_PATH}/.env</nodiff>
+    <nodiff>${WAZUH_PATH}/config/wazuh_cluster/authd.pass</nodiff>
+
+    <ignore>${WAZUH_PATH}/.git</ignore>
+    <ignore>${ZABBIX_PATH}/.git</ignore>
+    <ignore>${WAZUH_PATH}/config/wazuh_indexer_ssl_certs</ignore>
+    <ignore type="sregex">\\.log\$|\\.tmp\$|/__pycache__/</ignore>
   </syscheck>
 
 </agent_config>
@@ -350,14 +372,23 @@ check "$r" "local_rules.xml"
 # 6. Validar ANTES de reiniciar. Un XML malo deja el manager caído.
 # ─────────────────────────────────────────────────────────────────────
 log "Validando la configuración del manager ..."
-r=$(api GET "/manager/configuration/validation")
-status=$(echo "$r" | jq -r '.data.affected_items[0].status // "unknown"')
+status=""
+i=0
+while [ "$i" -lt 6 ]; do
+    r=$(api GET "/manager/configuration/validation")
+    status=$(echo "$r" | jq -r '(.data.affected_items[0].status // .data.status // "unknown")' 2>/dev/null)
+    [ "$status" = "OK" ] && break
+    i=$((i + 1))
+    warn "validacion intento ${i}/6: status=${status:-vacio}"
+    sleep 5
+done
+
 if [ "$status" != "OK" ]; then
-    echo "$r" | jq -r '.data.affected_items[0].details[]?' >&2 || true
-    error "la configuración no valida; NO se reinicia el manager"
+    warn "respuesta: $r"
+    echo "$r" | jq -r '.data.affected_items[0].details[]? // empty' >&2 || true
+    error "la configuración no valida (status=${status:-vacio}); NO se reinicia el manager"
 fi
 log "  configuración válida."
-
 # ─────────────────────────────────────────────────────────────────────
 # 7. Reiniciar el manager y esperar a que vuelva
 # ─────────────────────────────────────────────────────────────────────

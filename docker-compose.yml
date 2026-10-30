@@ -184,6 +184,7 @@ services:
       - WAZUH_API_USER=${API_USERNAME}
       - WAZUH_API_PASSWORD=${API_PASSWORD}
       - DATABUS_PATH=${DATABUS_PATH}
+      - INFOBUS_PATH=${INFOBUS_PATH}
     depends_on:
       wazuh.manager:
         condition: service_healthy
@@ -220,14 +221,17 @@ services:
       - TZ=${TZ}
     volumes:
       - ./${CONFIG_AGENT_SCRIPT}:/init_01.sh:ro
-      - wazuh_agent_etc:/var/ossec/etc
       - ./config/wazuh_cluster/authd.pass:/opt/authd.pass:ro
       - ./agent/conf/ossec.conf:/opt/ossec.conf.tpl:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ${WAZUH_PATH}:${WAZUH_PATH}:ro
+      - ${ZABBIX_PATH}:${ZABBIX_PATH}:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      #- /etc/os-release:/etc/os-release:ro
       - /var/log:/var/log:ro
+      - wazuh_agent_etc:/var/ossec/etc
       # - /etc:/host/etc:ro                     # opcional, para FIM del host
       # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
+      #- /etc/os-release:/etc/os-release:ro
     entrypoint: ["/init_01.sh"]
     depends_on:
       wazuh-init:
