@@ -356,6 +356,19 @@ LOCAL_RULES=$(cat <<'XML'
     <group>syscheck,</group>
   </rule>
 
+   <!-- R11: eventos malformados enviados a la cola muerta (infobus) -->
+  <rule id="100111" level="5">
+    <if_sid>100100</if_sid>
+    <field name="log">Invalid update event</field>
+    <description>infobus: evento de actualizacion malformado, enviado a dead-letter</description>
+  </rule>
+
+  <rule id="100112" level="9" frequency="10" timeframe="600">
+    <if_matched_sid>100111</if_matched_sid>
+    <description>infobus: productor enviando eventos malformados de forma sostenida</description>
+    <group>availability,</group>
+  </rule>
+
 </group>
 XML
 )
