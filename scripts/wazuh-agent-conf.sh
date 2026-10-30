@@ -6,36 +6,43 @@
 #──── Exit on error, e=exit on error, u=exit on undefined var ──────────
 set -eu
 
+#──── 1. Config declarativa: la fuente de verdad es el repo ────────────
 cp /opt/ossec.conf.tpl /var/ossec/etc/ossec.conf
-cp /opt/authd.pass /var/ossec/etc/authd.pass
+chown root:wazuh /var/ossec/etc/ossec.conf
+chmod 640 /var/ossec/etc/ossec.conf
 
-# Set permissions for the mounted authd.pass file
-if [ -f /var/ossec/etc/authd.pass ]; then
+#──── 2. authd.pass solo si falta enrolarse ────────────────────────────
+if [ ! -s /var/ossec/etc/client.keys ]; then
+    echo "🔑 Sin client.keys: se va a enrolar."
+    cp /opt/authd.pass /var/ossec/etc/authd.pass
     chown root:wazuh /var/ossec/etc/authd.pass
     chmod 640 /var/ossec/etc/authd.pass
     echo "🔐 Permisos de authd.pass ajustados."
+else
+    echo "✅ client.keys presente: no se re-enrola."
+    rm -f /var/ossec/etc/authd.pass
 fi
 
-if [ -n "$1" ]; then
-    echo "Wazuh manager server: $1"
-    cp /var/ossec/etc/ossec.conf /tmp/ossec.conf
-    sed -i "/<server>/,/<\/server>/ s|<address>.*</address>|<address>${1}</address>|" \
-    /tmp/ossec.conf
-    cat /tmp/ossec.conf > /var/ossec/etc/ossec.conf
-    rm /tmp/ossec.conf
+#──── 3. Dirección del manager: argumento o variable de entorno ────────
+if [ -n "${1:-}" ]; then
+    MANAGER="$1"
     shift
+else
+    MANAGER="${WAZUH_MANAGER_SERVER:-}"
 fi
 
+if [ -n "$MANAGER" ]; then
+    echo "Wazuh manager server: ${MANAGER}"
+    sed -i "/<server>/,/<\/server>/ s|<address>.*</address>|<address>${MANAGER}</address>|" \
+        /var/ossec/etc/ossec.conf
+fi
 
-# Install docker-listener dependencies only if missing (avoids reinstalling on each restart)
-#if ! python3 -c "import docker" >/dev/null 2>&1; then
-#    echo "📦 Installing Python dependencies for docker-listener..."
-#    dnf install -y python3-pip
-#    pip3 install docker==7.1.0 urllib3==1.26.20 requests==2.32.2
-#    echo "✅ Docker-listener dependencies installed."
-#else
-#    echo "✅ Docker-listener dependencies already present, skipping installation."
-#fi
+#──── 4. Grupo de enrolamiento ─────────────────────────────────────────
+if [ -n "${WAZUH_AGENT_GROUP:-}" ]; then
+    echo "Grupo de enrolamiento: ${WAZUH_AGENT_GROUP}"
+    sed -i "/<enrollment>/,/<\/enrollment>/ s|<groups>.*</groups>|<groups>${WAZUH_AGENT_GROUP}</groups>|" \
+        /var/ossec/etc/ossec.conf
+fi
 
-# Execute the original entrypoint of the agent image
+#──── 5. Entrypoint original de la imagen ──────────────────────────────
 exec /init "$@"
