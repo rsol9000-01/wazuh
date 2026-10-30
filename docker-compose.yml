@@ -173,10 +173,16 @@ services:
   ###########################
   wazuh-init:
     image: alpine/curl:latest
+    restart: "no"
     env_file: .env
     volumes:
       - ./${CONFIG_SERVER_SCRIPT}:/init.sh:ro
     entrypoint: ["sh", "-c", "apk add --no-cache bash && exec bash /init.sh"]
+    environment:
+      WAZUH_API_URL=${API_URL}
+      WAZUH_API_USER=${API_USERNAME}
+      WAZUH_API_PASSWORD=${API_PASSWORD}
+      DATABUS_PATH=${DATABUS_PATH}
     depends_on:
       wazuh.manager:
         condition: service_completed_successfully
@@ -201,11 +207,12 @@ services:
           memory: 512M
           cpus: "1.0"
     #user: "1001:990"
-    privileged: true
+    #privileged: true
     group_add:
       - "${DOCKER_GID}"
     environment:
       - WAZUH_MANAGER_SERVER=wazuh.manager
+      - WAZUH_AGENT_GROUP=${LOCAL_AGENT_GROUP}
       #- WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}

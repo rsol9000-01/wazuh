@@ -1,12 +1,41 @@
+#!/usr/bin/env bash
+#
+# wazuh-manager-conf.sh — prepara el manager ANTES de que exista cualquier agente.
+#
+# Crea los grupos, sube el agent.conf de cada grupo y las reglas propias
+# del proyecto vía la API de Wazuh (55000), valida la configuración,
+# reinicia el manager y termina. Es idempotente: se puede volver a correr.
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+NC='\033[0m'
+
+# ---------------------------------------------------------------------------
+# Print a consistently formatted section title with a chosen color
+# ---------------------------------------------------------------------------
+
+print_section() {
+  local color="$1"
+  local title="$2"
+  echo ""
+  echo -e "${color}-----------------------------------------------------${NC}"
+  echo -e "${color}  ${title}${NC}"
+  echo -e "${color}-----------------------------------------------------${NC}"
+}
+
 set -eu
 
 # ─────────────────────────────────────────────────────────────────────
 # Parámetros
 # ─────────────────────────────────────────────────────────────────────
-API="${API_URL:-https://wazuh-manager:55000}"
-USER="${API_USERNAME:-wazuh-wui}"
-PASS="${API_PASSWORD:?API_PASSWORD must be set in .env}"
-CA="${WAZUH_API_CA:-}"
+API="${WAZUH_API_URL:-https://wazuh.manager:55000}"
+USER="${WAZUH_API_USER:-wazuh-wui}"
+PASS="${WAZUH_API_PASSWORD:?WAZUH_API_PASSWORD must be set in .env}"
 INSECURE="${WAZUH_API_INSECURE:-0}"
 
 # Ruta del despliegue de databus EN EL HOST. Ajustar si difiere.
@@ -16,23 +45,21 @@ GROUPS="databus infobus monitoring"
 
 log()  { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
-die()  { echo "[ERROR] $*" >&2; exit 1; }
+error()  { echo "[ERROR] $*" >&2; exit 1; }
 
 # ─────────────────────────────────────────────────────────────────────
 # Proof for TLS or insecure mode. curl y jq son necesarios para la API.
 # ─────────────────────────────────────────────────────────────────────
-command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || die "falta curl"; }
-command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || die "falta jq"; }
+command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || error "falta curl"; }
+command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || error "falta jq"; }
 
 CURL_TLS=""
-if [ -n "$CA" ]; then
-    [ -f "$CA" ] || die "WAZUH_API_CA apunta a un archivo inexistente: $CA"
-    CURL_TLS="--cacert $CA"
-elif [ "$INSECURE" = "1" ]; then
-    warn "TLS sin verificar (WAZUH_API_INSECURE=1). Aceptable solo en red interna."
+
+if [ "$INSECURE" = "1" ]; then
+    warn "(WAZUH_API_INSECURE=1). Aceptable solo en red interna."
     CURL_TLS="-k"
 else
-    die "Defina WAZUH_API_CA con el CA del manager, o WAZUH_API_INSECURE=1 de forma explícita."
+    error "Defina WAZUH_API_INSECURE=1 de forma explícita."
 fi
 
 # ─────────────────────────────────────────────────────────────────────
@@ -42,7 +69,7 @@ log "Esperando la API en ${API} ..."
 i=0
 until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
     i=$((i + 1))
-    [ "$i" -ge 60 ] && die "la API no respondió en 300 s"
+    [ "$i" -ge 60 ] && error "la API no respondió en 300 s"
     sleep 5
 done
 log "API disponible."
@@ -53,10 +80,10 @@ log "API disponible."
 authenticate() {
     TOKEN=$(curl -s $CURL_TLS -u "${USER}:${PASS}" \
             -X POST "${API}/security/user/authenticate?raw=true") \
-        || die "fallo al autenticar contra la API"
+        || error "fallo al autenticar contra la API"
     case "$TOKEN" in
         ey*) : ;;
-        *)   die "credenciales rechazadas por la API (usuario ${USER})" ;;
+        *)   error "credenciales rechazadas por la API (usuario ${USER})" ;;
     esac
 }
 
@@ -76,15 +103,10 @@ api() {
 
 # Falla si la respuesta trae error distinto del "ya existe" que toleramos.
 check() {
-    _resp="$1"; _what="$2"; _tolerate="${3:-}"
-    _err=$(echo "$_resp" | jq -r '.error // 0')
-    if [ "$_err" != "0" ] && [ "$_err" != "null" ]; then
-        if [ -n "$_tolerate" ] && [ "$_err" = "$_tolerate" ]; then
-            log "  ${_what}: ya existía, sin cambios"
-            return 0
-        fi
+    _resp="$1"; _what="$2"
+    if echo "$_resp" | jq -e '.title? // (.error? | select(. != 0))' >/dev/null 2>&1; then
         warn "respuesta: $_resp"
-        die "${_what}: la API devolvió error ${_err}"
+        die "${_what}: la API rechazó la operación"
     fi
     log "  ${_what}: ok"
 }
@@ -97,8 +119,13 @@ log "Autenticado como ${USER}."
 # ─────────────────────────────────────────────────────────────────────
 log "Creando grupos ..."
 for g in $GROUPS; do
-    r=$(api POST "/groups" "application/json" "{\"group_id\":\"${g}\"}")
-    check "$r" "grupo ${g}" 1711      # 1711 = el grupo ya existe
+    if api GET "/groups?groups_list=${g}" \
+         | jq -e --arg g "$g" '.data.affected_items[]? | select(.name == $g)' >/dev/null 2>&1; then
+        log "  grupo ${g}: ya existe"
+    else
+        r=$(api POST "/groups" "application/json" "{\"group_id\":\"${g}\"}")
+        check "$r" "grupo ${g}"
+    fi
 done
 
 # ─────────────────────────────────────────────────────────────────────
@@ -319,7 +346,7 @@ r=$(api GET "/manager/configuration/validation")
 status=$(echo "$r" | jq -r '.data.affected_items[0].status // "unknown"')
 if [ "$status" != "OK" ]; then
     echo "$r" | jq -r '.data.affected_items[0].details[]?' >&2 || true
-    die "la configuración no valida; NO se reinicia el manager"
+    error "la configuración no valida; NO se reinicia el manager"
 fi
 log "  configuración válida."
 
@@ -335,7 +362,7 @@ sleep 10
 i=0
 until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
     i=$((i + 1))
-    [ "$i" -ge 36 ] && die "el manager no volvió en 180 s tras el reinicio"
+    [ "$i" -ge 36 ] && error "el manager no volvió en 180 s tras el reinicio"
     sleep 5
 done
 
