@@ -289,10 +289,16 @@ LOCAL_RULES=$(cat <<'XML'
   </rule>
 
   <!-- R6: reintento infinito en el flujo de eventos (H9, infobus) -->
-  <rule id="100108" level="7" frequency="5" timeframe="300">
+   <rule id="100108" level="3">
     <if_sid>100100</if_sid>
     <field name="log">Failed to process update event</field>
+    <description>infobus: fallo al procesar un evento de actualizacion</description>
+  </rule>
+
+  <rule id="100110" level="7" frequency="5" timeframe="300">
+    <if_matched_sid>100108</if_matched_sid>
     <description>infobus: evento reprocesado sin limite, sin dead-letter</description>
+    <group>gtfs_integrity,</group>
   </rule>
 
   <!-- R7: codigo clonado desde la red en arranque (H15) -->
@@ -330,7 +336,13 @@ LOCAL_RULES=$(cat <<'XML'
 </group>
 XML
 )
-r=$(api PUT "/rules/files/local_rules.xml?overwrite=true" "application/octet-stream" "$LOCAL_RULES")
+#r=$(api PUT "/rules/files/local_rules.xml?overwrite=true" "application/octet-stream" "$LOCAL_RULES")
+printf '%s\n' "$LOCAL_RULES" > /tmp/local_rules.xml
+r=$(curl -s $CURL_TLS -X PUT "${API}/rules/files/local_rules.xml?overwrite=true" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -H "Content-Type: application/octet-stream" \
+      --data-binary @/tmp/local_rules.xml)
+
 check "$r" "local_rules.xml"
 
 # ─────────────────────────────────────────────────────────────────────
