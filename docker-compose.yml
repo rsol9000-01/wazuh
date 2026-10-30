@@ -179,13 +179,13 @@ services:
       - ./${CONFIG_SERVER_SCRIPT}:/init.sh:ro
     entrypoint: ["sh", "-c", "apk add --no-cache bash && exec bash /init.sh"]
     environment:
-      WAZUH_API_URL=${API_URL}
-      WAZUH_API_USER=${API_USERNAME}
-      WAZUH_API_PASSWORD=${API_PASSWORD}
-      DATABUS_PATH=${DATABUS_PATH}
+      - WAZUH_API_URL=${API_URL}
+      - WAZUH_API_USER=${API_USERNAME}
+      - WAZUH_API_PASSWORD=${API_PASSWORD}
+      - DATABUS_PATH=${DATABUS_PATH}
     depends_on:
       wazuh.manager:
-        condition: service_completed_successfully
+        condition: service_healthy
     #
     # restart: "no" # solo corre una vez y sale
 
@@ -195,6 +195,7 @@ services:
       context: ./agent
       dockerfile: Dockerfile
     image: simovilab/wazuh-agent-docker:4.14.5
+    pull_policy: build
     restart: always
     container_name: wazuh.agent
     hostname: $LOCAL_AGENT_HOSTNAME
@@ -218,22 +219,23 @@ services:
       - TZ=${TZ}
     volumes:
       - ./${CONFIG_AGENT_SCRIPT}:/init_01.sh:ro
-      - ./config/wazuh_cluster/authd.pass:/var/ossec/etc/authd.pass
-      - ./agent/conf/ossec.conf:/var/ossec/etc/ossec.conf
+      - wazuh_agent_etc:/var/ossec/etc
+      - ./config/wazuh_cluster/authd.pass:/opt/authd.pass:ro
+      - ./agent/conf/ossec.conf:/opt/ossec.conf.tpl:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       #- /etc/os-release:/etc/os-release:ro
       - /var/log:/var/log:ro
       # - /etc:/host/etc:ro                     # opcional, para FIM del host
       # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
     entrypoint: ["/init_01.sh"]
-
     depends_on:
-      wazuh.manager:
-        condition: service_healthy
+      wazuh.init:
+        condition: service_completed_successfully
   
 volumes:
   wazuh_api_configuration:
   wazuh_etc:
+  wazuh_agent_etc:
   wazuh_logs:
   wazuh_queue:
   wazuh_var_multigroups:
