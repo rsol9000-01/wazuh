@@ -41,7 +41,7 @@ INSECURE="${WAZUH_API_INSECURE:-0}"
 # Ruta del despliegue de databus EN EL HOST. Ajustar si difiere.
 DATABUS_PATH="${DATABUS_PATH:-/opt/databus}"
 
-GROUPS="databus infobus monitoring"
+AGENT_GROUPS="databus infobus monitoring"
 
 log()  { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
@@ -118,7 +118,7 @@ log "Autenticado como ${USER}."
 # 1. Grupos de agentes
 # ─────────────────────────────────────────────────────────────────────
 log "Creando grupos ..."
-for g in $GROUPS; do
+for g in $AGENT_GROUPS; do
     if api GET "/groups?groups_list=${g}" \
          | jq -e --arg g "$g" '.data.affected_items[]? | select(.name == $g)' >/dev/null 2>&1; then
         log "  grupo ${g}: ya existe"
@@ -162,7 +162,7 @@ AGENT_CONF_DATABUS=$(cat <<XML
 </agent_config>
 XML
 )
-r=$(api PUT "/groups/databus/configuration" "application/octet-stream" "$AGENT_CONF_DATABUS")
+r=$(api PUT "/groups/databus/configuration" "application/xml" "$AGENT_CONF_DATABUS")
 check "$r" "agent.conf de databus"
 
 # ─────────────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ AGENT_CONF_INFOBUS=$(cat <<'XML'
 </agent_config>
 XML
 )
-r=$(api PUT "/groups/infobus/configuration" "application/octet-stream" "$AGENT_CONF_INFOBUS")
+r=$(api PUT "/groups/infobus/configuration" "application/xml" "$AGENT_CONF_INFOBUS")
 check "$r" "agent.conf de infobus"
 
 # ─────────────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ AGENT_CONF_MONITORING=$(cat <<'XML'
 </agent_config>
 XML
 )
-r=$(api PUT "/groups/monitoring/configuration" "application/octet-stream" "$AGENT_CONF_MONITORING")
+r=$(api PUT "/groups/monitoring/configuration" "application/xml" "$AGENT_CONF_MONITORING")
 check "$r" "agent.conf de monitoring"
 
 # ─────────────────────────────────────────────────────────────────────
@@ -231,8 +231,7 @@ LOCAL_RULES=$(cat <<'XML'
   Cada regla corresponde a un hallazgo documentado en 7.3.1 del machote.
   Rango reservado para reglas propias: 100000+.
 -->
-
-<group name="simovilab,databus,">
+<group name="simovilab,">
 
   <rule id="100100" level="0">
     <decoded_as>json</decoded_as>
@@ -305,16 +304,12 @@ LOCAL_RULES=$(cat <<'XML'
     <group>supply_chain,</group>
   </rule>
 
-</group>
-
-
-<group name="simovilab,syscheck,">
-
   <!-- R8 · Cambio en configuracion o secretos -->
   <rule id="100120" level="12">
     <if_sid>550,553,554</if_sid>
     <field name="file">/\.env$|/\.env\.prod$|compose\.prod\.yml$</field>
     <description>databus: cambio en configuracion o secretos del despliegue</description>
+    <group>syscheck,</group>
   </rule>
 
   <!-- R9 · Cambio en el GTFS publicado — RNF de integridad -->
@@ -322,7 +317,7 @@ LOCAL_RULES=$(cat <<'XML'
     <if_sid>550,553,554</if_sid>
     <field name="file">databus_feed_files</field>
     <description>databus: cambio en el GTFS Schedule publicado</description>
-    <group>gtfs_integrity,</group>
+    <group>syscheck,gtfs_integrity,</group>
   </rule>
 
   <!-- R10 · Socket de Docker — riesgo aceptado de 7.11 -->
@@ -330,11 +325,13 @@ LOCAL_RULES=$(cat <<'XML'
     <if_sid>550,554</if_sid>
     <field name="file">/var/run/docker\.sock</field>
     <description>Cambio en el socket de Docker</description>
+    <group>syscheck,</group>
   </rule>
 
 </group>
 XML
 )
+
 r=$(api PUT "/rules/files/local_rules.xml?overwrite=true" "application/octet-stream" "$LOCAL_RULES")
 check "$r" "local_rules.xml"
 
