@@ -44,10 +44,10 @@ services:
           "CMD-SHELL",
           "curl -k -u ${INDEXER_USERNAME}:${INDEXER_PASSWORD} https://localhost:9200 >/dev/null 2>&1"
         ]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 10
+      start_period: 300s
   wazuh.manager:
     container_name: wazuh.manager
     image: wazuh/wazuh-manager:4.14.5
@@ -111,10 +111,10 @@ services:
           "CMD-SHELL",
           "curl -sk https://localhost:55000 > /dev/null || exit 1"
         ]
-      interval: 10s
+      interval: 15s
       timeout: 10s
       retries: 10
-      
+      start_period: 180s
     depends_on:
       wazuh.indexer:
         condition: service_healthy
@@ -158,9 +158,10 @@ services:
           "CMD-SHELL",
           "curl -sk https://localhost:5601/api/status >/dev/null || exit 1"
         ]
-      interval: 10s
+      interval: 15s
       timeout: 10s
       retries: 10
+      start_period: 300s
 
     depends_on:
       wazuh.indexer:
