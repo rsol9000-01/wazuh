@@ -226,12 +226,11 @@ check "$r" "agent.conf de monitoring"
 # ─────────────────────────────────────────────────────────────────────
 log "Subiendo local_rules.xml ..."
 LOCAL_RULES=$(cat <<'XML'
-<!--
-  Reglas del TFG — monitoreo de databus/infobus (simovilab, UCR).
-  Cada regla corresponde a un hallazgo documentado en 7.3.1 del machote.
-  Rango reservado para reglas propias: 100000+.
--->
 <group name="simovilab,">
+
+  <!-- Reglas del TFG - monitoreo de databus/infobus (simovilab, UCR).
+       Cada regla corresponde a un hallazgo documentado en 7.3.1.
+       Rango reservado para reglas propias: 100000+. -->
 
   <rule id="100100" level="0">
     <decoded_as>json</decoded_as>
@@ -239,7 +238,7 @@ LOCAL_RULES=$(cat <<'XML'
     <description>Linea de log de contenedor Docker</description>
   </rule>
 
-  <!-- R1 · Fallo de importacion del GTFS — H11 -->
+  <!-- R1: fallo de importacion del GTFS (H11) -->
   <rule id="100101" level="10">
     <if_sid>100100</if_sid>
     <field name="log">GTFS Schedule bootstrap failed|Import failed for provider|IntegrityError</field>
@@ -247,7 +246,7 @@ LOCAL_RULES=$(cat <<'XML'
     <group>gtfs_integrity,</group>
   </rule>
 
-  <!-- R2 · Host HTTP rechazado — H12 -->
+  <!-- R2: host HTTP rechazado (H12) -->
   <rule id="100102" level="8">
     <if_sid>100100</if_sid>
     <field name="log">DisallowedHost|Invalid HTTP_HOST header</field>
@@ -261,14 +260,14 @@ LOCAL_RULES=$(cat <<'XML'
     <group>recon,</group>
   </rule>
 
-  <!-- R3 · Error 5xx de la aplicacion -->
+  <!-- R3: error 5xx de la aplicacion -->
   <rule id="100104" level="7">
     <if_sid>100100</if_sid>
     <field name="log">Internal Server Error:</field>
     <description>databus: respuesta 5xx de Django</description>
   </rule>
 
-  <!-- R4 · Enumeracion de rutas -->
+  <!-- R4: enumeracion de rutas -->
   <rule id="100105" level="3">
     <if_sid>100100</if_sid>
     <field name="log">Not Found: </field>
@@ -281,7 +280,7 @@ LOCAL_RULES=$(cat <<'XML'
     <group>recon,</group>
   </rule>
 
-  <!-- R5 · Autenticacion fallida en Redis -->
+  <!-- R5: autenticacion fallida en Redis -->
   <rule id="100107" level="9">
     <if_sid>100100</if_sid>
     <field name="log">WRONGPASS|NOAUTH</field>
@@ -289,14 +288,14 @@ LOCAL_RULES=$(cat <<'XML'
     <group>authentication_failed,</group>
   </rule>
 
-  <!-- R6 · Reintento infinito en el flujo de eventos — H9 (infobus) -->
+  <!-- R6: reintento infinito en el flujo de eventos (H9, infobus) -->
   <rule id="100108" level="7" frequency="5" timeframe="300">
     <if_sid>100100</if_sid>
     <field name="log">Failed to process update event</field>
     <description>infobus: evento reprocesado sin limite, sin dead-letter</description>
   </rule>
 
-  <!-- R7 · Codigo clonado desde la red en arranque — H15 -->
+  <!-- R7: codigo clonado desde la red en arranque (H15) -->
   <rule id="100109" level="6">
     <if_sid>100100</if_sid>
     <field name="log">Cloning gtfs-\w+ repository</field>
@@ -304,15 +303,15 @@ LOCAL_RULES=$(cat <<'XML'
     <group>supply_chain,</group>
   </rule>
 
-  <!-- R8 · Cambio en configuracion o secretos -->
+  <!-- R8: cambio en configuracion o secretos -->
   <rule id="100120" level="12">
     <if_sid>550,553,554</if_sid>
-    <field name="file">/\.env$|/\.env\.prod$|compose\.prod\.yml$</field>
+    <field name="file">.env|compose.prod.yml</field>
     <description>databus: cambio en configuracion o secretos del despliegue</description>
     <group>syscheck,</group>
   </rule>
 
-  <!-- R9 · Cambio en el GTFS publicado — RNF de integridad -->
+  <!-- R9: cambio en el GTFS publicado -->
   <rule id="100121" level="10">
     <if_sid>550,553,554</if_sid>
     <field name="file">databus_feed_files</field>
@@ -320,10 +319,10 @@ LOCAL_RULES=$(cat <<'XML'
     <group>syscheck,gtfs_integrity,</group>
   </rule>
 
-  <!-- R10 · Socket de Docker — riesgo aceptado de 7.11 -->
+  <!-- R10: socket de Docker (riesgo aceptado) -->
   <rule id="100122" level="12">
     <if_sid>550,554</if_sid>
-    <field name="file">/var/run/docker\.sock</field>
+    <field name="file">docker.sock</field>
     <description>Cambio en el socket de Docker</description>
     <group>syscheck,</group>
   </rule>
@@ -331,7 +330,6 @@ LOCAL_RULES=$(cat <<'XML'
 </group>
 XML
 )
-
 r=$(api PUT "/rules/files/local_rules.xml?overwrite=true" "application/octet-stream" "$LOCAL_RULES")
 check "$r" "local_rules.xml"
 
