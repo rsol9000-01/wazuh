@@ -229,7 +229,7 @@ services:
       # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
     entrypoint: ["/init_01.sh"]
     depends_on:
-      wazuh.init:
+      wazuh-init:
         condition: service_completed_successfully
   
 volumes:
