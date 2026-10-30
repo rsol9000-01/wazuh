@@ -66,25 +66,32 @@ fi
 # Esperar a que la API responda
 # ─────────────────────────────────────────────────────────────────────
 log "Esperando la API en ${API} ..."
-i=0
-until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
-    i=$((i + 1))
-    [ "$i" -ge 60 ] && error "la API no respondió en 300 s"
-    sleep 5
-done
-log "API disponible."
+wait_for_api
+log "API disponible y autenticada como ${USER}."
 
 # ─────────────────────────────────────────────────────────────────────
 # Autenticación. El JWT dura 900 s; se refresca antes del reinicio.
 # ─────────────────────────────────────────────────────────────────────
-authenticate() {
+try_authenticate() {
     TOKEN=$(curl -s $CURL_TLS -u "${USER}:${PASS}" \
-            -X POST "${API}/security/user/authenticate?raw=true") \
-        || error "fallo al autenticar contra la API"
+            -X POST "${API}/security/user/authenticate?raw=true" 2>/dev/null) || return 1
     case "$TOKEN" in
-        ey*) : ;;
-        *)   error "credenciales rechazadas por la API (usuario ${USER})" ;;
+        ey*) return 0 ;;
+        *)   return 1 ;;
     esac
+}
+
+authenticate() {
+    try_authenticate || error "credenciales rechazadas por la API (usuario ${USER})"
+}
+
+wait_for_api() {
+    i=0
+    until try_authenticate; do
+        i=$((i + 1))
+        [ "$i" -ge 36 ] && error "la API no acepto credenciales en 180 s"
+        sleep 5
+    done
 }
 
 # api <método> <ruta> [content-type] [cuerpo]
@@ -111,8 +118,9 @@ check() {
     log "  ${_what}: ok"
 }
 
-authenticate
-log "Autenticado como ${USER}."
+log "Esperando la API en ${API} ..."
+wait_for_api
+log "API disponible. Autenticado como ${USER}."
 
 # ─────────────────────────────────────────────────────────────────────
 # 1. Grupos de agentes
@@ -366,17 +374,13 @@ r=$(api PUT "/manager/restart")
 check "$r" "reinicio del manager"
 
 sleep 10
-i=0
-until curl -s -o /dev/null $CURL_TLS --max-time 5 "${API}/"; do
-    i=$((i + 1))
-    [ "$i" -ge 36 ] && error "el manager no volvió en 180 s tras el reinicio"
-    sleep 5
-done
+wait_for_api
+log "API lista tras el reinicio."
 
 # ─────────────────────────────────────────────────────────────────────
 # 8. Resumen
 # ─────────────────────────────────────────────────────────────────────
-authenticate
+
 log "Grupos existentes:"
 api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agentes: \(.count))"'
 
