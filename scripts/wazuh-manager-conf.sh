@@ -106,7 +106,7 @@ check() {
     _resp="$1"; _what="$2"
     if echo "$_resp" | jq -e '.title? // (.error? | select(. != 0))' >/dev/null 2>&1; then
         warn "respuesta: $_resp"
-        die "${_what}: la API rechazó la operación"
+        error "${_what}: la API rechazó la operación"
     fi
     log "  ${_what}: ok"
 }

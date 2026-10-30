@@ -420,6 +420,32 @@ if [ "$FLAG_SERVER" = "true" ]; then
 fi
 
 #---------- Run the compose file ----------------
-echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
-docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env" up -d
+
+DC=(docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env")
+
+case "$ACTION" in
+  up)
+    echo -e "🚀  ${GREEN}Starting Docker Compose deployment...${NC}"
+    "${DC[@]}" up -d
+    ;;
+  down)
+    echo -e "🛑  ${YELLOW}Stopping stack...${NC}"
+    "${DC[@]}" down
+    ;;
+  restart)
+    echo -e "🔄  ${CYAN}Restarting stack...${NC}"
+    "${DC[@]}" restart
+    ;;
+  logs)
+    "${DC[@]}" logs -f
+    ;;
+  ps)
+    "${DC[@]}" ps
+    ;;
+  *)
+    echo -e "❌  ${RED}Unknown action: ${ACTION}${NC}"
+    usage
+    exit 1
+    ;;
+esac
 #docker compose logs -f wazuh-init
