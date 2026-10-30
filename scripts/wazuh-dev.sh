@@ -253,19 +253,19 @@ if [ "$FLAG_SERVER" = "true" ]; then
 fi
 #------------ post-install script ------------------
 
-SCRIPT_POST_INSTALL=$(grep '^SCRIPT_POST_INSTALL[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+CONFIG_AGENT_SCRIPT=$(grep '^CONFIG_AGENT_SCRIPT[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 
-if [ -z "$SCRIPT_POST_INSTALL" ]; then
-    echo "❌ Error: SCRIPT_POST_INSTALL is not set in .env"
+if [ -z "$CONFIG_AGENT_SCRIPT" ]; then
+    echo "❌ Error: CONFIG_AGENT_SCRIPT is not set in .env"
     exit 1
 fi
    
-if [ ! -f "$SCRIPT_POST_INSTALL" ]; then
-  echo "❌  Error: $SCRIPT_POST_INSTALL not found."
+if [ ! -f "$CONFIG_AGENT_SCRIPT" ]; then
+  echo "❌  Error: $CONFIG_AGENT_SCRIPT not found."
   exit 1
 fi
-echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$SCRIPT_POST_INSTALL${NC}"
-chmod +x $SCRIPT_POST_INSTALL
+echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$CONFIG_AGENT_SCRIPT${NC}"
+chmod +x $CONFIG_AGENT_SCRIPT
 
 # ------- API data file for Wazuh dashboard - server mode only ------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then

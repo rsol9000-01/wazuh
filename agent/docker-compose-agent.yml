@@ -22,6 +22,7 @@ services:
       - "${DOCKER_GID}"
     environment:
       - WAZUH_MANAGER_SERVER=${REMOTE_AGENT_MANAGER_SERVER}
+      - WAZUH_AGENT_GROUP=${REMOTE_AGENT_GROUP}
       #- WAZUH_AGENT_NAME=localhost
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}
