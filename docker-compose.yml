@@ -185,6 +185,8 @@ services:
       - WAZUH_API_PASSWORD=${API_PASSWORD}
       - DATABUS_PATH=${DATABUS_PATH}
       - INFOBUS_PATH=${INFOBUS_PATH}
+      - WAZUH_PATH=${WAZUH_PATH}
+      - ZABBIX_PATH=${ZABBIX_PATH}
     depends_on:
       wazuh.manager:
         condition: service_healthy

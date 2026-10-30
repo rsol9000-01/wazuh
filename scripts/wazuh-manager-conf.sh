@@ -158,7 +158,7 @@ AGENT_CONF_DATABUS=$(cat <<XML
     <nodiff>${DATABUS_PATH}/.env</nodiff>
     <nodiff>${DATABUS_PATH}/.env.prod</nodiff>
     <ignore>${DATABUS_PATH}/.git</ignore>
-    <ignore type="sregex">\.log$|\.tmp$|/__pycache__/</ignore>
+    <ignore type="sregex">\\.log\$|\\.tmp\$|/__pycache__/</ignore>
   </syscheck>
 
 </agent_config>
@@ -273,13 +273,13 @@ LOCAL_RULES=$(cat <<'XML'
   <rule id="100102" level="8">
     <if_sid>100100</if_sid>
     <field name="log">DisallowedHost|Invalid HTTP_HOST header</field>
-    <description>databus: peticion rechazada por ALLOWED_HOSTS</description>
+    <description>Peticion rechazada por ALLOWED_HOSTS</description>
     <group>recon,</group>
   </rule>
 
   <rule id="100103" level="12" frequency="8" timeframe="120">
     <if_matched_sid>100102</if_matched_sid>
-    <description>databus: barrido de nombres de host, 8 rechazos en 120 s</description>
+    <description>Barrido de nombres de host, 8 rechazos en 120 s</description>
     <group>recon,</group>
   </rule>
 
@@ -287,19 +287,19 @@ LOCAL_RULES=$(cat <<'XML'
   <rule id="100104" level="7">
     <if_sid>100100</if_sid>
     <field name="log">Internal Server Error:</field>
-    <description>databus: respuesta 5xx de Django</description>
+    <description>Respuesta 5xx de Django</description>
   </rule>
 
   <!-- R4: enumeracion de rutas -->
   <rule id="100105" level="3">
     <if_sid>100100</if_sid>
     <field name="log">Not Found: </field>
-    <description>databus: 404</description>
+    <description>404 en ruta inexistente</description>
   </rule>
 
   <rule id="100106" level="10" frequency="20" timeframe="60">
     <if_matched_sid>100105</if_matched_sid>
-    <description>databus: rafaga de 404, enumeracion de rutas</description>
+    <description>Rafaga de 404, enumeracion de rutas</description>
     <group>recon,</group>
   </rule>
 
@@ -307,7 +307,7 @@ LOCAL_RULES=$(cat <<'XML'
   <rule id="100107" level="9">
     <if_sid>100100</if_sid>
     <field name="log">WRONGPASS|NOAUTH</field>
-    <description>databus: autenticacion fallida contra Redis</description>
+    <description>Autenticacion fallida contra Redis</description>
     <group>authentication_failed,</group>
   </rule>
 
@@ -336,7 +336,7 @@ LOCAL_RULES=$(cat <<'XML'
   <rule id="100120" level="12">
     <if_sid>550,553,554</if_sid>
     <field name="file">.env|compose.prod.yml</field>
-    <description>databus: cambio en configuracion o secretos del despliegue</description>
+    <description>Cambio en configuracion o secretos del despliegue</description>
     <group>syscheck,</group>
   </rule>
 
