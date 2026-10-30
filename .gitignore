@@ -10,3 +10,5 @@
 
 # Certificados para https
 config/wazuh_indexer_ssl_certs/*
+config/wazuh_dashboard/wazuh.yml
+config/wazuh_indexer/internal_users.yml

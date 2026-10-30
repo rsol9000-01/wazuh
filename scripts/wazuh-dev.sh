@@ -235,6 +235,7 @@ echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
 
 #--------------- Internal users file only server modo ------------------
 if [ "$FLAG_SERVER" = "true" ]; then
+  [ -f "$INTERNAL_USERS_FILE" ] || cp "${INTERNAL_USERS_FILE}.template" "$INTERNAL_USERS_FILE"
   if [ ! -f "$INTERNAL_USERS_FILE" ]; then
       echo "❌  Error: $INTERNAL_USERS_FILE not found."
       exit 1
@@ -270,6 +271,7 @@ chmod +x $CONFIG_AGENT_SCRIPT
 # ------- API data file for Wazuh dashboard - server mode only ------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
   API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
+  [ -f "$API_DATA" ] || cp "${API_DATA}.template" "$API_DATA"
   if [ ! -f "$API_DATA" ]; then
     echo "❌  Error: $API_DATA not found."
     exit 1
