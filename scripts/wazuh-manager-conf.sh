@@ -63,13 +63,6 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────
-# Esperar a que la API responda
-# ─────────────────────────────────────────────────────────────────────
-log "Esperando la API en ${API} ..."
-wait_for_api
-log "API disponible y autenticada como ${USER}."
-
-# ─────────────────────────────────────────────────────────────────────
 # Autenticación. El JWT dura 900 s; se refresca antes del reinicio.
 # ─────────────────────────────────────────────────────────────────────
 try_authenticate() {
