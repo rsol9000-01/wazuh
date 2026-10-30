@@ -6,6 +6,9 @@
 #──── Exit on error, e=exit on error, u=exit on undefined var ──────────
 set -eu
 
+cp /opt/ossec.conf.tpl /var/ossec/etc/ossec.conf
+cp /opt/authd.pass /var/ossec/etc/authd.pass
+
 # Set permissions for the mounted authd.pass file
 if [ -f /var/ossec/etc/authd.pass ]; then
     chown root:wazuh /var/ossec/etc/authd.pass
