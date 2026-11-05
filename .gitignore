@@ -12,3 +12,6 @@
 config/wazuh_indexer_ssl_certs/*
 config/wazuh_dashboard/wazuh.yml
 config/wazuh_indexer/internal_users.yml
+
+# Clave de enrolamiento: la genera wazuh-dev.sh desde AGENT_AUTH_PASSWORD (.env)
+config/wazuh_cluster/authd.pass
