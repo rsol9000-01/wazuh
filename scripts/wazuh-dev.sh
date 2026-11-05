@@ -199,6 +199,26 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo -e "✅  curl ready: ${GREEN}$(curl -V | head -n1 | cut -d' ' -f1-2)${NC}"
 fi
 
+#--------------- rsyslog: source of /var/log/auth.log (server and agent) -----------
+# Debian 12 / recent Ubuntu ship journald only: without rsyslog there is no
+# /var/log/auth.log and the agent gets no sshd events (rules 5712/5720/5763).
+# Never stops the deployment: on failure it only warns.
+if [ ! -f /var/log/auth.log ]; then
+  if command -v apt-get &> /dev/null; then
+    echo "🔧  /var/log/auth.log not found. Installing rsyslog..."
+    if apt-get update -qq && apt-get install -y -qq rsyslog; then
+      systemctl enable --now rsyslog || echo -e "⚠️  ${YELLOW}rsyslog installed but could not be started.${NC}"
+      echo -e "✅  rsyslog ready: sshd events -> ${GREEN}/var/log/auth.log${NC}"
+    else
+      echo -e "⚠️  ${YELLOW}Could not install rsyslog. SSH events will not reach Wazuh.${NC}"
+    fi
+  else
+    echo -e "⚠️  ${YELLOW}/var/log/auth.log not found and apt-get unavailable. SSH events will not reach Wazuh.${NC}"
+  fi
+else
+  echo -e "✅  /var/log/auth.log present."
+fi
+
 #--------------- apache utilities for htpasswd -------------------
 #if ! command -v htpasswd &> /dev/null; then
 #  echo "🔧  Installing apache2-utils..."
@@ -280,11 +300,14 @@ if [ "$FLAG_SERVER" = "true" ]; then
 fi
 
 #------------- Agent authentication password file ------------------------------
-if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
-  echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
-  exit 1
-fi
-  echo -e "✅  Auth password file found."
+# authd.pass ya no se versiona: se genera más abajo desde AGENT_AUTH_PASSWORD
+# del .env (sección "COPY AGENT AUTH PASS").
+ 
+#if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
+#  echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
+#  exit 1
+#fi
+#  echo -e "✅  Auth password file found."
 
 
 ############################################################################################################

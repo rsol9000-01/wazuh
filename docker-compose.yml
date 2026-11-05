@@ -202,7 +202,15 @@ services:
     pull_policy: build
     restart: always
     container_name: wazuh.agent
-    hostname: $LOCAL_AGENT_HOSTNAME
+    # Respuesta activa con efecto real en R4: firewall-drop escribe en el
+    # netfilter del namespace de red del contenedor; para que sea el del
+    # host, el agente comparte la red del host y recibe solo NET_ADMIN
+    # (no privileged). En este modo no aplica "hostname:" y el DNS interno
+    # de Docker no resuelve wazuh.manager: se usa el puerto publicado.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+
     deploy:
       resources:
         limits:
@@ -216,9 +224,9 @@ services:
     group_add:
       - "${DOCKER_GID}"
     environment:
-      - WAZUH_MANAGER_SERVER=wazuh.manager
+      - WAZUH_MANAGER_SERVER=127.0.0.1
       - WAZUH_AGENT_GROUP=${LOCAL_AGENT_GROUP}
-      #- WAZUH_AGENT_NAME=localhost
+      - WAZUH_AGENT_NAME=${LOCAL_AGENT_HOSTNAME}
       - WAZUH_MANAGER_SERVER_PORT=1514
       - TZ=${TZ}
     volumes:

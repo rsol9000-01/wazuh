@@ -44,5 +44,14 @@ if [ -n "${WAZUH_AGENT_GROUP:-}" ]; then
         /var/ossec/etc/ossec.conf
 fi
 
-#──── 5. Entrypoint original de la imagen ──────────────────────────────
+#──── 5. Nombre del agente (solo aplica al enrolarse) ──────────────────
+#     Con network_mode: host no se puede fijar hostname en el compose,
+#     así que el nombre se pasa explícito en <enrollment>.
+if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
+    echo "Nombre del agente: ${WAZUH_AGENT_NAME}"
+    sed -i "/<enrollment>/,/<\/enrollment>/ s|<enabled>yes</enabled>|&\n      <agent_name>${WAZUH_AGENT_NAME}</agent_name>|" \
+        /var/ossec/etc/ossec.conf
+fi
+
+#──── 6. Entrypoint original de la imagen ──────────────────────────────
 exec /init "$@"

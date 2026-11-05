@@ -202,6 +202,72 @@ docker-compose restart zabbix-server
 docker-compose down
 ```
 
+# ⚙️ **Cambios en la configuración del manager (`wazuh_manager.conf`)**
+
+`config/wazuh_cluster/wazuh_manager.conf` se monta en `/wazuh-config-mount/etc/ossec.conf`.
+Al arrancar el contenedor, el script de la imagen (`/etc/cont-init.d/0-wazuh-init`)
+lo copia a `/var/ossec/etc/ossec.conf`, que es el archivo que usa el manager.
+
+### ⚠️ Limitación conocida de la imagen `wazuh/wazuh-manager:4.14.5`
+
+| Arranque | Resultado |
+|---|---|
+| **Primero** (despliegue nuevo) | Copia `wazuh_manager.conf` correctamente |
+| **Siguientes** (restart, recreate, reinicio del host) | **No lo copia**: el manager sigue con la configuración que ya tenía |
+
+**Causa:** el script borra `/var/ossec/data_tmp` al terminar el primer arranque.
+En los siguientes, el volumen `wazuh_var_multigroups` sigue vacío (no hay agentes
+con varios grupos), la copia desde `data_tmp` falla y el script sale antes de copiar
+la configuración. En los logs aparece:
+
+```text
+Error executing command: 'cp -ar /var/ossec/data_tmp/permanent/var/ossec/var/multigroups/. /var/ossec/var/multigroups'.
+[cont-init.d] 0-wazuh-init: exited 1.
+```
+
+El repositorio oficial `wazuh-docker` lo corrige en la rama 5.x; ninguna versión 4.14.x
+publicada trae la corrección.
+
+### ✅ Cuándo NO hay que hacer nada
+
+- Despliegue nuevo: toma `wazuh_manager.conf` del repositorio.
+- Reinicios sin cambios en `wazuh_manager.conf`: la configuración persiste en el volumen `wazuh_etc`.
+- Cambios en grupos, `agent.conf` o `local_rules.xml`: los aplica `wazuh-init` por la API
+  (`docker compose up -d wazuh-init`).
+
+### 🔧 Procedimiento al modificar `wazuh_manager.conf` en un despliegue existente
+
+```bash
+cd /home/wazuh
+
+# 1. Ver qué cambia respecto a la configuración en uso
+docker cp wazuh.manager:/var/ossec/etc/ossec.conf /tmp/ossec.en-uso.conf
+diff /tmp/ossec.en-uso.conf config/wazuh_cluster/wazuh_manager.conf
+
+# 2. Validar el archivo nuevo (no modifica nada)
+docker exec wazuh.manager /var/ossec/bin/wazuh-analysisd -t -c /wazuh-config-mount/etc/ossec.conf && echo "config OK"
+
+# 3. Solo si dio "config OK": respaldar y aplicar
+docker exec wazuh.manager cp /var/ossec/etc/ossec.conf /var/ossec/etc/ossec.conf.bak
+docker exec wazuh.manager cp /wazuh-config-mount/etc/ossec.conf /var/ossec/etc/ossec.conf
+docker exec wazuh.manager /var/ossec/bin/wazuh-control restart
+
+# 4. Verificar que coincide con el repositorio y que los agentes reconectan
+docker cp wazuh.manager:/var/ossec/etc/ossec.conf /tmp/ossec.en-uso.conf
+diff /tmp/ossec.en-uso.conf config/wazuh_cluster/wazuh_manager.conf && echo "alineado con el repo"
+docker exec wazuh.manager /var/ossec/bin/agent_control -l
+```
+
+**Revertir:**
+
+```bash
+docker exec wazuh.manager cp /var/ossec/etc/ossec.conf.bak /var/ossec/etc/ossec.conf
+docker exec wazuh.manager /var/ossec/bin/wazuh-control restart
+```
+
+> `docker compose restart wazuh.manager` **no** aplica los cambios, por la limitación
+> descrita. `docker compose down -v` sí los aplica, pero borra agentes, llaves y alertas.
+
 ---
 
 # 🔒 **Recomendaciones de Seguridad**
