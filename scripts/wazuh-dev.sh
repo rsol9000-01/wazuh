@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Wazuh-dev.sh - development helper for Wazuh docker-compose (server or agent)
-# Styled to match zabbix-dev.sh (colors, icons, menu) — English version
+# ---------------------------------------------------------------------------
+# Preparar el entorno de desarrollo y desplegar los servicios de Wazuh
+# ---------------------------------------------------------------------------
 
-# Colors
+# ---------------------------------------------------------------------------
+# Definir los colores usados en los mensajes del script
+# ---------------------------------------------------------------------------
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -11,7 +14,9 @@ CYAN='\033[0;36m'
 GRAY='\033[0;90m'
 NC='\033[0m'
 
-# -------------- Script usage instructions
+# ---------------------------------------------------------------------------
+# Mostrar la sintaxis, las opciones y las acciones disponibles
+# ---------------------------------------------------------------------------
 usage() {
 
   echo ""
@@ -26,9 +31,8 @@ usage() {
 }
 
 # ---------------------------------------------------------------------------
-# Print a consistently formatted section title with a chosen color
+# Imprimir un título de sección con el color indicado
 # ---------------------------------------------------------------------------
-
 print_section() {
   local color="$1"
   local title="$2"
@@ -38,42 +42,60 @@ print_section() {
   echo -e "${color}-----------------------------------------------------${NC}"
 }
 
+# ---------------------------------------------------------------------------
+# Validar que la contraseña cumpla los requisitos de longitud y caracteres
+# ---------------------------------------------------------------------------
 validate_password() {
   local password="$1"
-  local var_name="${2:-Password}"  # just for error message
+  # -------------------------------------------------------------------------
+  # Elegir el nombre que se incluirá en los mensajes de error
+  # -------------------------------------------------------------------------
+  local var_name="${2:-Password}"
   local len=${#password}
 
-  # Longitud entre 8 y 64
+  # -------------------------------------------------------------------------
+  # Comprobar que la longitud esté entre 8 y 64 caracteres
+  # -------------------------------------------------------------------------
   if (( len < 8 || len > 64 )); then
     echo "❌  Error: ${var_name} must be between 8 and 64 characters long (current: ${len})."
     return 1
   fi
 
-  # Al menos una mayúscula
+  # -------------------------------------------------------------------------
+  # Exigir al menos una letra mayúscula
+  # -------------------------------------------------------------------------
   if [[ ! "$password" =~ [A-Z] ]]; then
     echo "❌  Error: ${var_name} must contain at least one uppercase letter."
     return 1
   fi
 
-  # Al menos una minúscula
+  # -------------------------------------------------------------------------
+  # Exigir al menos una letra minúscula
+  # -------------------------------------------------------------------------
   if [[ ! "$password" =~ [a-z] ]]; then
     echo "❌  Error: ${var_name} must contain at least one lowercase letter."
     return 1
   fi
 
-  # Al menos un número
+  # -------------------------------------------------------------------------
+  # Exigir al menos un número
+  # -------------------------------------------------------------------------
   if [[ ! "$password" =~ [0-9] ]]; then
     echo "❌  Error: ${var_name} must contain at least one digit."
     return 1
   fi
 
-  # Al menos uno de los símbolos permitidos: . * + ? -
+  # -------------------------------------------------------------------------
+  # Exigir al menos uno de los símbolos permitidos
+  # -------------------------------------------------------------------------
   if [[ ! "$password" =~ [.*+?\-] ]]; then
     echo "❌  Error: ${var_name} must contain at least one of the following symbols: . * + ? -"
     return 1
   fi
 
-  # Characters not allowed: $ | & \
+  # -------------------------------------------------------------------------
+  # Rechazar los caracteres que no están permitidos
+  # -------------------------------------------------------------------------
   if [[ "$password" == *['$|&\']* ]]; then
     echo "❌  Error: Character (\$, |, &, \\) it is not allowed on ${var_name}."
     exit 1
@@ -84,27 +106,37 @@ validate_password() {
 
 clear
 print_section "$GREEN" "Wazuh infrastructure stack installation script"
-#--------------  Error control
+# ---------------------------------------------------------------------------
+# Detener la ejecución ante errores, variables sin definir o fallos de tubería
+# ---------------------------------------------------------------------------
 set -euo pipefail
 
-#-------------  Always run from the repo root, regardless of where the script is invoked from
+# ---------------------------------------------------------------------------
+# Cambiar al directorio raíz del repositorio desde cualquier ubicación
+# ---------------------------------------------------------------------------
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 FLAG_SERVER=false
 
-# ---------- parse args
+# ---------------------------------------------------------------------------
+# Leer el tipo de despliegue y la acción solicitada
+# ---------------------------------------------------------------------------
 CHOICE="${1:-}"
 ACTION="${2:-up}"
 
-# ---------- Only one or two argument are allowed.
+# ---------------------------------------------------------------------------
+# Validar la cantidad de argumentos recibidos
+# ---------------------------------------------------------------------------
 if [[ $# -ne 1 && $# -ne 2 ]]; then
   usage
   exit 1
 fi
 
-# ---------- Check the first argument to determine the installation type
+# ---------------------------------------------------------------------------
+# Determinar si se desplegará el agente o la infraestructura del servidor
+# ---------------------------------------------------------------------------
 
 if [ "$1" = "agent" ]; then
   echo "🛰️   Deploying Wazuh agent..."
@@ -116,7 +148,9 @@ else
   exit 1
 fi
 
-#---------- Check the second argument for a custom seed value (optional)
+# ---------------------------------------------------------------------------
+# Conservar deshabilitado el menú interactivo de selección del despliegue
+# ---------------------------------------------------------------------------
 
 #if [[ -z "$CHOICE" ]]; then
 #  echo "Select deployment type:"
@@ -135,7 +169,9 @@ fi
 
 AGENT_AUTH_PASSWORD_FILE=$REPO_ROOT/config/wazuh_cluster/authd.pass
 
-# ---------- Compose file to deploy 
+# ---------------------------------------------------------------------------
+# Seleccionar los archivos de configuración y Compose del despliegue
+# ---------------------------------------------------------------------------
 CERTS_FILE="generate-indexer-certs.yml"
 COMPOSE_FILE="docker-compose.yml"
 if [ "$FLAG_SERVER" = "false" ]; then
@@ -145,9 +181,9 @@ fi
 
 INTERNAL_USERS_FILE="$REPO_ROOT/config/wazuh_indexer/internal_users.yml"
 
-#############################################################################################################
-#######################   Establecer vm.max_map_count server mode only  #####################################
-#############################################################################################################
+# ---------------------------------------------------------------------------
+# Ajustar vm.max_map_count cuando se despliegue el servidor
+# ---------------------------------------------------------------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   CURRENT=$(cat /proc/sys/vm/max_map_count)
@@ -167,19 +203,21 @@ else
   echo "💾  Skipping vm.max_map_count check for agent deployment."
 fi  
 
-#######################################################################################################
-####################################    Check dependencies  #################################################
-#############################################################################################################
-
-
-#--------------- Docker ---------------
+# ---------------------------------------------------------------------------
+# Comprobar e instalar las dependencias necesarias
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Verificar que Docker esté instalado y disponible
+# ---------------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
     echo "❌  Error: docker is not installed or not in PATH."
     exit 1
 fi
 echo -e "✅  Docker ready: ${GREEN}$(docker --version | cut -d' ' -f1-3)${NC}"
 
-# ------------- Get the Docker group ID
+# ---------------------------------------------------------------------------
+# Obtener el identificador del grupo de Docker
+# ---------------------------------------------------------------------------
 DOCKER_GID=$(getent group docker | cut -d: -f3 || true)
 if [ -z "$DOCKER_GID" ]; then
     echo "❌  Docker group not found."
@@ -189,7 +227,9 @@ fi
 #export DOCKER_GID
 echo -e "🐳  Docker GID: ${GREEN}$DOCKER_GID${NC}"
 
-#--------------- curl, server mode only -------------------
+# ---------------------------------------------------------------------------
+# Instalar curl y verificar su disponibilidad en modo servidor
+# ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
   if ! command -v curl &> /dev/null; then
     echo "🔧  Installing curl..."
@@ -199,10 +239,12 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo -e "✅  curl ready: ${GREEN}$(curl -V | head -n1 | cut -d' ' -f1-2)${NC}"
 fi
 
-#--------------- rsyslog: source of /var/log/auth.log (server and agent) -----------
-# Debian 12 / recent Ubuntu ship journald only: without rsyslog there is no
-# /var/log/auth.log and the agent gets no sshd events (rules 5712/5720/5763).
-# Never stops the deployment: on failure it only warns.
+# ---------------------------------------------------------------------------
+# Crear /var/log/auth.log con rsyslog si el sistema todavía no lo proporciona
+# ---------------------------------------------------------------------------
+# Sin rsyslog, el agente no recibe los eventos SSH desde journald. Si la
+# instalación o el inicio del servicio falla, continuar y mostrar una alerta.
+# ---------------------------------------------------------------------------
 if [ ! -f /var/log/auth.log ]; then
   if command -v apt-get &> /dev/null; then
     echo "🔧  /var/log/auth.log not found. Installing rsyslog..."
@@ -228,12 +270,12 @@ fi
 #echo "✅  htpasswd ready."
 
 
-###################################################################################################
-###################################    Check required files  ######################################
-###################################################################################################
-
-
-#--------------- .env  -------------------
+# ---------------------------------------------------------------------------
+# Comprobar los archivos requeridos para el despliegue
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Verificar la existencia del archivo de variables de entorno
+# ---------------------------------------------------------------------------
 if [ ! -f ".env" ]; then
     echo "🚨  Warning: .env file not found."
     if [ -f ".env.example" ]; then
@@ -246,14 +288,18 @@ fi
 echo "✅  The environment variables will be loaded from the .env file."
 
 
-#--------------- Docker compose file ------------------
+# ---------------------------------------------------------------------------
+# Verificar la existencia del archivo de Docker Compose seleccionado
+# ---------------------------------------------------------------------------
 if [ ! -f "$COMPOSE_FILE" ]; then
     echo "❌  Error: $COMPOSE_FILE not found."
     exit 1
 fi
 echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
 
-#--------------- Internal users file only server modo ------------------
+# ---------------------------------------------------------------------------
+# Crear y verificar el archivo de usuarios internos en modo servidor
+# ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
   [ -f "$INTERNAL_USERS_FILE" ] || cp "${INTERNAL_USERS_FILE}.template" "$INTERNAL_USERS_FILE"
   if [ ! -f "$INTERNAL_USERS_FILE" ]; then
@@ -263,7 +309,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo -e "✅  Internal users file found: ${GREEN}$INTERNAL_USERS_FILE${NC}"
 fi
 
-#------------ generate-indexer-certs - server mode only ------------------
+# ---------------------------------------------------------------------------
+# Verificar el archivo de generación de certificados en modo servidor
+# ---------------------------------------------------------------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   if [ ! -f "$CERTS_FILE" ]; then
@@ -272,7 +320,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
   fi
   echo -e "✅  Certs file found: ${GREEN}$CERTS_FILE${NC}"
 fi
-#------------ post-install script ------------------
+# ---------------------------------------------------------------------------
+# Verificar y habilitar el script posterior a la instalación del agente
+# ---------------------------------------------------------------------------
 
 CONFIG_AGENT_SCRIPT=$(grep '^CONFIG_AGENT_SCRIPT[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 
@@ -288,7 +338,9 @@ fi
 echo -e "✅  Post-install script found: ${GREEN}$REPO_ROOT/$CONFIG_AGENT_SCRIPT${NC}"
 chmod +x $CONFIG_AGENT_SCRIPT
 
-# ------- API data file for Wazuh dashboard - server mode only ------------------------------
+# ---------------------------------------------------------------------------
+# Preparar y verificar el archivo de conexión a la API del dashboard
+# ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
   API_DATA="$REPO_ROOT/config/wazuh_dashboard/wazuh.yml"
   [ -f "$API_DATA" ] || cp "${API_DATA}.template" "$API_DATA"
@@ -299,9 +351,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
     echo -e "✅  API data file found: ${GREEN}$API_DATA${NC}"
 fi
 
-#------------- Agent authentication password file ------------------------------
-# authd.pass ya no se versiona: se genera más abajo desde AGENT_AUTH_PASSWORD
-# del .env (sección "COPY AGENT AUTH PASS").
+# ---------------------------------------------------------------------------
+# Generar el archivo de autenticación del agente desde la variable de .env
+# ---------------------------------------------------------------------------
  
 #if [ ! -f "$AGENT_AUTH_PASSWORD_FILE" ]; then
 #  echo "❌  Error: $AGENT_AUTH_PASSWORD_FILE not found."
@@ -310,9 +362,9 @@ fi
 #  echo -e "✅  Auth password file found."
 
 
-############################################################################################################
-############################   get hostname for agent name  ################################################
-############################################################################################################
+# ---------------------------------------------------------------------------
+# Obtener y exportar el nombre del agente local
+# ---------------------------------------------------------------------------
 
 LOCAL_AGENT_HOSTNAME=$(grep '^LOCAL_AGENT_HOSTNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 
@@ -322,14 +374,18 @@ if [ -z "$LOCAL_AGENT_HOSTNAME" ]; then
 fi
 
 if [[ "$LOCAL_AGENT_HOSTNAME" == "localhost" ]]; then
-    #---------- change to actual hostname ----------------
+    # -----------------------------------------------------------------------
+    # Reemplazar localhost por el nombre completo del equipo
+    # -----------------------------------------------------------------------
     LOCAL_AGENT_HOSTNAME=$(hostname -f || true)
 fi
 
 echo -e "📝  Agent hostname to use: ${YELLOW}$LOCAL_AGENT_HOSTNAME${NC}"
 export LOCAL_AGENT_HOSTNAME
 
-#--------------- Setting up API users and passwords- server mode only  -------------------
+# ---------------------------------------------------------------------------
+# Configurar la contraseña de la API en modo servidor
+# ---------------------------------------------------------------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   API_NEW_PASSWORD=$(grep '^API_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
@@ -337,7 +393,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
     echo "❌ Error: API_PASSWORD is not set in .env"
     exit 1
   fi
-# ----- Password validation
+  # -------------------------------------------------------------------------
+  # Validar la contraseña antes de actualizar la configuración del dashboard
+  # -------------------------------------------------------------------------
   if ! validate_password "$API_NEW_PASSWORD" "API_PASSWORD"; then
     exit 1
   fi
@@ -348,7 +406,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
 fi
 
 
-#--------------- NEW USER DEFINED BY MY_USERNAME AND MY_PASSWORD  -------------------
+# ---------------------------------------------------------------------------
+# Crear o actualizar el usuario administrador definido en .env
+# ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
   MY_USERNAME=$(grep '^MY_USERNAME[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
   if [ -z "$MY_USERNAME" ]; then
@@ -385,10 +445,14 @@ EOF
     echo "✅  New user created with credentials defined on .env: $MY_USERNAME:MY_PASSWORD"
   fi
 fi
-# ------ Copy GID
+# ---------------------------------------------------------------------------
+# Actualizar en .env el identificador del grupo de Docker
+# ---------------------------------------------------------------------------
 sed -i "s|^\([[:space:]]*DOCKER_GID=[[:space:]]*\).*|\1$DOCKER_GID|" .env
 
-# -------Set new password for kibanauser - server mode only
+# ---------------------------------------------------------------------------
+# Actualizar la contraseña de kibanaserver en modo servidor
+# ---------------------------------------------------------------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   KIBANA_PASSWORD=$(grep '^DASHBOARD_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
@@ -398,7 +462,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
   fi
 
   if [[ "$KIBANA_PASSWORD" != kibanaserver ]]; then
-    # ------ Password validation
+    # -----------------------------------------------------------------------
+    # Validar la contraseña antes de calcular y guardar su hash
+    # -----------------------------------------------------------------------
     if ! validate_password "$KIBANA_PASSWORD" "DASHBOARD_PASSWORD"; then
       exit 1
     fi
@@ -415,28 +481,35 @@ if [ "$FLAG_SERVER" = "true" ]; then
   fi
 fi
 #exit 1
-#########################################################################################################
-#####################    COPY AGENT AUTH PASS TO RESPECTIVE FILE  #######################################
-#########################################################################################################
+
+# ---------------------------------------------------------------------------
+# Validar y guardar la contraseña de autenticación del agente
+# ---------------------------------------------------------------------------
 AGENT_AUTH_PASSWORD=$(grep '^AGENT_AUTH_PASSWORD[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
 if [ -z "$AGENT_AUTH_PASSWORD" ]; then
     echo "❌ Error: AGENT_AUTH_PASSWORD is not set in .env"
     exit 1
 fi
-# ------- Password validation 
+# ---------------------------------------------------------------------------
+# Validar la contraseña antes de guardarla en el archivo de autenticación
+# ---------------------------------------------------------------------------
 if ! validate_password "$AGENT_AUTH_PASSWORD" "AGENT_AUTH_PASSWORD"; then
     exit 1
 fi
 
 echo -n "$AGENT_AUTH_PASSWORD" > $AGENT_AUTH_PASSWORD_FILE
 
-# ------ Create Wazuh group and set permissions for the agent authentication password file
+# ---------------------------------------------------------------------------
+# Reservar para configuración manual la creación del grupo y permisos del archivo
+# ---------------------------------------------------------------------------
 #groupadd -r wazuh 2>/dev/null || true
 #chmod 640 $AGENT_AUTH_PASSWORD_FILE
 #chown root:wazuh $AGENT_AUTH_PASSWORD_FILE
 echo -e "✅  Agent authentication password saved to: ${GREEN}$AGENT_AUTH_PASSWORD_FILE${NC}"
 
-# ------ Generate self-signed certificates  
+# ---------------------------------------------------------------------------
+# Generar certificados autofirmados en modo servidor
+# ---------------------------------------------------------------------------
 
 if [ "$FLAG_SERVER" = "true" ]; then
   echo "🔐  Generating self-signed certificates..."
@@ -444,7 +517,9 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
 fi
 
-#---------- Run the compose file ----------------
+# ---------------------------------------------------------------------------
+# Ejecutar la acción solicitada mediante Docker Compose
+# ---------------------------------------------------------------------------
 
 DC=(docker compose -f "$COMPOSE_FILE" --env-file "$REPO_ROOT/.env")
 

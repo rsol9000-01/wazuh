@@ -1,19 +1,25 @@
 #!/bin/sh
-##########################################################################################
-###### Script post-install for wazuh, executed by the wazuh-agents           #############
-##########################################################################################
+# ---------------------------------------------------------------------------
+# Preparar la configuración posterior a la instalación del agente Wazuh
+# ---------------------------------------------------------------------------
 
-#──── Exit on error, e=exit on error, u=exit on undefined var ──────────
+# ---------------------------------------------------------------------------
+# Detener la ejecución ante errores o variables sin definir
+# ---------------------------------------------------------------------------
 set -eu
 
-# Cambiar permisos del archivo authd.pass montado
+# ---------------------------------------------------------------------------
+# Ajustar los permisos del archivo de autenticación si está montado
+# ---------------------------------------------------------------------------
 if [ -f /var/ossec/etc/authd.pass ]; then
     chown root:wazuh /var/ossec/etc/authd.pass
     chmod 640 /var/ossec/etc/authd.pass
     echo "🔐 Permisos de authd.pass ajustados."
 fi
 
-# Instalar dependencias del docker-listener solo si falta (evita reinstalar en cada restart)
+# ---------------------------------------------------------------------------
+# Instalar las dependencias del docker-listener solo cuando sean necesarias
+# ---------------------------------------------------------------------------
 #if ! python3 -c "import docker" >/dev/null 2>&1; then
 #    echo "📦 Instalando dependencias Python para docker-listener..."
 #    dnf install -y python3-pip
@@ -23,5 +29,7 @@ fi
 #    echo "✅ Dependencias docker-listener ya presentes, se omite instalación."
 #fi
 
-# Ejecutar el entrypoint original de la imagen del agente
+# ---------------------------------------------------------------------------
+# Transferir el control al punto de entrada original de la imagen del agente
+# ---------------------------------------------------------------------------
 exec /init "$@"

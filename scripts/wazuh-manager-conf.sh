@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-#
-# wazuh-manager-conf.sh — prepara el manager ANTES de que exista cualquier agente.
-#
-# Crea los grupos, sube el agent.conf de cada grupo y las reglas propias
-# del proyecto vía la API de Wazuh (55000), valida la configuración,
-# reinicia el manager y termina. Es idempotente: se puede volver a correr.
+# ---------------------------------------------------------------------------
+# Preparar el manager Wazuh antes de que se enrolen los agentes
+# Crear los grupos, cargar sus configuraciones y reglas, validar los cambios
+# y reiniciar el manager. Permitir volver a ejecutar el script sin duplicarlos.
+# ---------------------------------------------------------------------------
 
-# Colors
+# ---------------------------------------------------------------------------
+# Definir los colores usados en los mensajes del script
+# ---------------------------------------------------------------------------
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -16,7 +17,7 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 # ---------------------------------------------------------------------------
-# Print a consistently formatted section title with a chosen color
+# Imprimir un título de sección con el color indicado
 # ---------------------------------------------------------------------------
 
 print_section() {
@@ -28,17 +29,22 @@ print_section() {
   echo -e "${color}-----------------------------------------------------${NC}"
 }
 
+# ---------------------------------------------------------------------------
+# Detener la ejecución ante errores o variables sin definir
+# ---------------------------------------------------------------------------
 set -eu
 
-# ─────────────────────────────────────────────────────────────────────
-# Parámetros
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Leer las credenciales, las opciones de TLS y las rutas de despliegue
+# ---------------------------------------------------------------------------
 API="${WAZUH_API_URL:-https://wazuh.manager:55000}"
 USER="${WAZUH_API_USER:-wazuh-wui}"
 PASS="${WAZUH_API_PASSWORD:?WAZUH_API_PASSWORD must be set in .env}"
 INSECURE="${WAZUH_API_INSECURE:-0}"
 
-# Ruta del despliegue EN EL HOST. Ajustar si difiere.
+# ---------------------------------------------------------------------------
+# Definir las rutas del host y ajustarlas si el despliegue usa otras ubicaciones
+# ---------------------------------------------------------------------------
 DATABUS_PATH="${DATABUS_PATH:-/home/databus}"
 INFOBUS_PATH="${INFOBUS_PATH:-/home/infobus}"
 WAZUH_PATH="${WAZUH_PATH:-/home/wazuh}"
@@ -46,13 +52,22 @@ ZABBIX_PATH="${ZABBIX_PATH:-/home/zabbix}"
 
 AGENT_GROUPS="databus infobus monitoring"
 
+# ---------------------------------------------------------------------------
+# Registrar un mensaje informativo en la salida estándar
+# ---------------------------------------------------------------------------
 log()  { echo "[INFO] $*"; }
+# ---------------------------------------------------------------------------
+# Mostrar una advertencia en la salida de error
+# ---------------------------------------------------------------------------
 warn() { echo "[WARN] $*" >&2; }
+# ---------------------------------------------------------------------------
+# Mostrar un error y finalizar el script
+# ---------------------------------------------------------------------------
 error()  { echo "[ERROR] $*" >&2; exit 1; }
 
-# ─────────────────────────────────────────────────────────────────────
-# Proof for TLS or insecure mode. curl y jq son necesarios para la API.
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Verificar las dependencias necesarias para consultar la API
+# ---------------------------------------------------------------------------
 command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || error "falta curl"; }
 command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || error "falta jq"; }
 
@@ -65,9 +80,11 @@ else
     error "Defina WAZUH_API_INSECURE=1 de forma explícita."
 fi
 
-# ─────────────────────────────────────────────────────────────────────
-# Autenticación. El JWT dura 900 s; se refresca antes del reinicio.
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Obtener y renovar el token de autenticación de la API antes de que expire
+# El JWT tiene una vigencia de 900 segundos, por lo que renovarlo antes del
+# reinicio evita usar un token vencido.
+# ---------------------------------------------------------------------------
 try_authenticate() {
     TOKEN=$(curl -s $CURL_TLS -u "${USER}:${PASS}" \
             -X POST "${API}/security/user/authenticate?raw=true" 2>/dev/null) || return 1
@@ -77,10 +94,16 @@ try_authenticate() {
     esac
 }
 
+# ---------------------------------------------------------------------------
+# Exigir que la API acepte las credenciales configuradas
+# ---------------------------------------------------------------------------
 authenticate() {
     try_authenticate || error "credenciales rechazadas por la API (usuario ${USER})"
 }
 
+# ---------------------------------------------------------------------------
+# Esperar hasta que la API permita autenticarse o se agoten los reintentos
+# ---------------------------------------------------------------------------
 wait_for_api() {
     i=0
     until try_authenticate; do
@@ -90,7 +113,9 @@ wait_for_api() {
     done
 }
 
-# api <método> <ruta> [content-type] [cuerpo]
+# ---------------------------------------------------------------------------
+# Enviar una solicitud a la API con el método, la ruta y el cuerpo indicados
+# ---------------------------------------------------------------------------
 api() {
     _m="$1"; _p="$2"; _ct="${3:-}"; _b="${4:-}"
     if [ -n "$_ct" ]; then
@@ -104,7 +129,9 @@ api() {
     fi
 }
 
-# Falla si la respuesta trae error distinto del "ya existe" que toleramos.
+# ---------------------------------------------------------------------------
+# Validar la respuesta y detenerse ante errores no tolerados
+# ---------------------------------------------------------------------------
 check() {
     _resp="$1"; _what="$2"
     if echo "$_resp" | jq -e '.title? // (.error? | select(. != 0))' >/dev/null 2>&1; then
@@ -118,9 +145,9 @@ log "Esperando la API en ${API} ..."
 wait_for_api
 log "API disponible. Autenticado como ${USER}."
 
-# ─────────────────────────────────────────────────────────────────────
-# 1. Grupos de agentes
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Crear los grupos de agentes si todavía no existen
+# ---------------------------------------------------------------------------
 log "Creando grupos ..."
 for g in $AGENT_GROUPS; do
     if api GET "/groups?groups_list=${g}" \
@@ -132,13 +159,12 @@ for g in $AGENT_GROUPS; do
     fi
 done
 
-# ─────────────────────────────────────────────────────────────────────
-# 2. agent.conf del grupo databus (R3)
-#
-#    El <nodiff> no es opcional: sin él la alerta de FIM viaja al manager
-#    con el contenido del archivo, y SECRET_KEY, DB_PASSWORD, RABBITMQ_PASS
-#    y API_TOKEN quedarían en claro en el log de alertas.
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Configurar la recopilación de logs y la integridad del grupo databus
+# ---------------------------------------------------------------------------
+# Excluir las diferencias de los archivos de entorno para evitar que sus
+# contenidos sensibles aparezcan en las alertas de integridad.
+# ---------------------------------------------------------------------------
 log "Subiendo agent.conf del grupo databus ..."
 AGENT_CONF_DATABUS=$(cat <<XML
 <agent_config>
@@ -167,9 +193,9 @@ XML
 r=$(api PUT "/groups/databus/configuration" "application/xml" "$AGENT_CONF_DATABUS")
 check "$r" "agent.conf de databus"
 
-# ─────────────────────────────────────────────────────────────────────
-# 3. agent.conf del grupo infobus (R2)
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Configurar la recopilación de logs y la integridad del grupo infobus
+# ---------------------------------------------------------------------------
 log "Subiendo agent.conf del grupo infobus ..."
 AGENT_CONF_INFOBUS=$(cat <<XML
 <agent_config>
@@ -198,11 +224,12 @@ XML
 r=$(api PUT "/groups/infobus/configuration" "application/xml" "$AGENT_CONF_INFOBUS")
 check "$r" "agent.conf de infobus"
 
-# ─────────────────────────────────────────────────────────────────────
-# 4. agent.conf del grupo monitoring (R4, host propio)
-#    Es el único con una fuente que trae srcip, así que es donde la
-#    respuesta activa se puede demostrar de verdad.
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Configurar la recopilación de logs y la integridad del grupo monitoring
+# ---------------------------------------------------------------------------
+# Usar auth.log como fuente con dirección IP de origen para validar respuestas
+# activas en el host que ejecuta el monitoreo.
+# ---------------------------------------------------------------------------
 log "Subiendo agent.conf del grupo monitoring ..."
 AGENT_CONF_MONITORING=$(cat <<XML
 <agent_config>
@@ -244,9 +271,9 @@ XML
 r=$(api PUT "/groups/monitoring/configuration" "application/xml" "$AGENT_CONF_MONITORING")
 check "$r" "agent.conf de monitoring"
 
-# ─────────────────────────────────────────────────────────────────────
-# 5. Reglas propias del proyecto (rango 100100–100199)
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Cargar las reglas propias del proyecto dentro del rango reservado
+# ---------------------------------------------------------------------------
 log "Subiendo local_rules.xml ..."
 LOCAL_RULES=$(cat <<'XML'
 <group name="simovilab,">
@@ -381,9 +408,9 @@ r=$(curl -s $CURL_TLS -X PUT "${API}/rules/files/local_rules.xml?overwrite=true"
 
 check "$r" "local_rules.xml"
 
-# ─────────────────────────────────────────────────────────────────────
-# 6. Validar ANTES de reiniciar. Un XML malo deja el manager caído.
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Validar la configuración antes de reiniciar el manager
+# ---------------------------------------------------------------------------
 log "Validando la configuración del manager ..."
 status=""
 i=0
@@ -402,10 +429,12 @@ if [ "$status" != "OK" ]; then
     error "la configuración no valida (status=${status:-vacio}); NO se reinicia el manager"
 fi
 log "  configuración válida."
-# ─────────────────────────────────────────────────────────────────────
-# 7. Reiniciar el manager y esperar a que vuelva
-# ─────────────────────────────────────────────────────────────────────
-authenticate          # el JWT pudo expirar durante los pasos anteriores
+# ---------------------------------------------------------------------------
+# Renovar el token y reiniciar el manager
+# ---------------------------------------------------------------------------
+# Reautenticar antes del reinicio para evitar usar un JWT que haya expirado.
+# ---------------------------------------------------------------------------
+authenticate
 log "Reiniciando el manager ..."
 r=$(api PUT "/manager/restart")
 check "$r" "reinicio del manager"
@@ -414,9 +443,9 @@ sleep 10
 wait_for_api
 log "API lista tras el reinicio."
 
-# ─────────────────────────────────────────────────────────────────────
-# 8. Resumen
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Mostrar el resumen de grupos y las instrucciones de enrolamiento
+# ---------------------------------------------------------------------------
 
 log "Grupos existentes:"
 api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agentes: \(.count))"'
