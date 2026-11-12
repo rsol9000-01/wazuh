@@ -11,7 +11,7 @@ Docker Compose deployment of Wazuh (single-node) to watch the security of [datab
 - **Server (`server`):** Wazuh Indexer, Wazuh Manager and Wazuh Dashboard. It includes the `wazuh-init` container, which creates the agent groups, their configuration and the project rules through the API, and a local agent in the `monitoring` group.
 - **Agent (`agent`):** a Wazuh agent in Docker on each application server. It enrolls itself in its group (`databus` or `infobus`) with an enrollment password. It reads container logs and watches the integrity of the deployment files.
 
-<img width="80%" alt="Wazuh on Docker architecture" src="./diagramas/wazuh-docker.png" />
+<img width="80%" alt="Wazuh on Docker architecture" src="./diagramas/wazuh-docker.svg" />
 
 ## Architecture
 
