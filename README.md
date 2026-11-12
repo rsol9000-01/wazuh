@@ -1,6 +1,6 @@
 # Wazuh · databus and infobus security
 
-**English** · [Español](README.es.md)
+**English** · [Español](README%20es.md)
 
 ![Static Badge](https://img.shields.io/badge/SIEM-Wazuh_4.14-white?logo=wazuh)
 ![Static Badge](https://img.shields.io/badge/indexer-OpenSearch-white?logo=opensearch)
