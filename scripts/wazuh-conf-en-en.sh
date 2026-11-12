@@ -1,15 +1,15 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# Preparar la configuración posterior a la instalación del agente Wazuh
+# Prepare the Wazuh agent configuration after installation
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Detener la ejecución ante errores o variables sin definir
+# Stop execution on errors or undefined variables
 # ---------------------------------------------------------------------------
 set -eu
 
 # ---------------------------------------------------------------------------
-# Ajustar los permisos del archivo de autenticación si está montado
+# Set the permissions on the authentication file if it is mounted
 # ---------------------------------------------------------------------------
 if [ -f /var/ossec/etc/authd.pass ]; then
     chown root:wazuh /var/ossec/etc/authd.pass
@@ -18,18 +18,18 @@ if [ -f /var/ossec/etc/authd.pass ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Instalar las dependencias del docker-listener solo cuando sean necesarias
+# Install docker-listener dependencies only when needed
 # ---------------------------------------------------------------------------
 #if ! python3 -c "import docker" >/dev/null 2>&1; then
-#    echo "📦 Instalando dependencias Python para docker-listener..."
+#    echo "📦 Installing Python dependencies for docker-listener..."
 #    dnf install -y python3-pip
 #    pip3 install docker==7.1.0 urllib3==1.26.20 requests==2.32.2
-#    echo "✅ Dependencias docker-listener instaladas."
+#    echo "✅ docker-listener dependencies installed."
 #else
-#    echo "✅ Dependencias docker-listener ya presentes, se omite instalación."
+#    echo "✅ docker-listener dependencies are already present; skipping installation."
 #fi
 
 # ---------------------------------------------------------------------------
-# Transferir el control al punto de entrada original de la imagen del agente
+# Hand control over to the agent image's original entry point
 # ---------------------------------------------------------------------------
 exec /init "$@"

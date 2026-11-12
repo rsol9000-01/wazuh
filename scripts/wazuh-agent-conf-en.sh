@@ -1,22 +1,22 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# Configurar el agente Wazuh después de iniciar el contenedor
+# Configure the Wazuh agent after the container starts
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Detener la ejecución ante errores o variables sin definir
+# Stop execution on errors or undefined variables
 # ---------------------------------------------------------------------------
 set -eu
 
 # ---------------------------------------------------------------------------
-# Instalar la configuración declarativa versionada en el repositorio
+# Install the version-controlled declarative configuration from the repository
 # ---------------------------------------------------------------------------
 cp /opt/ossec.conf.tpl /var/ossec/etc/ossec.conf
 chown root:wazuh /var/ossec/etc/ossec.conf
 chmod 640 /var/ossec/etc/ossec.conf
 
 # ---------------------------------------------------------------------------
-# Preparar la contraseña de enrolamiento solo si el agente aún no está enrolado
+# Set up the enrollment password only if the agent has not enrolled yet
 # ---------------------------------------------------------------------------
 if [ ! -s /var/ossec/etc/client.keys ]; then
     echo "🔑 client.keys not found: starting agent enrollment."
@@ -30,7 +30,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Obtener la dirección del manager desde el argumento o el entorno
+# Get the manager address from an argument or the environment
 # ---------------------------------------------------------------------------
 if [ -n "${1:-}" ]; then
     MANAGER="$1"
@@ -46,7 +46,7 @@ if [ -n "$MANAGER" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Configurar el grupo de enrolamiento cuando esté definido
+# Configure the enrollment group when one is defined
 # ---------------------------------------------------------------------------
 if [ -n "${WAZUH_AGENT_GROUP:-}" ]; then
     echo "Enrollment group: ${WAZUH_AGENT_GROUP}"
@@ -55,9 +55,9 @@ if [ -n "${WAZUH_AGENT_GROUP:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Configurar el nombre del agente durante el enrolamiento
-# Con network_mode: host, definirlo explícitamente en <enrollment> porque
-# Compose no puede asignar el nombre de host del contenedor.
+# Configure the agent name during enrollment
+# With network_mode: host, set it explicitly in <enrollment> because
+# Compose cannot assign the container's host name.
 # ---------------------------------------------------------------------------
 if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
     echo "Agent name: ${WAZUH_AGENT_NAME}"
@@ -66,6 +66,6 @@ if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Transferir el control al punto de entrada original de la imagen
+# Hand control over to the image's original entry point
 # ---------------------------------------------------------------------------
 exec /init "$@"
