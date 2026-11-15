@@ -127,13 +127,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${WAZUH_TRAEFIK_NETWORK}"
-      - "traefik.http.routers.zabbix.rule=Host(`${WAZUH_WEB_HOST}`)"
-      - "traefik.http.routers.zabbix.entrypoints=websecure"
-      - "traefik.http.routers.zabbix.tls=true"
-      - "traefik.http.routers.zabbix.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      #- "traefik.http.middlewares.zabbix-ip.ipallowlist.sourcerange=${WAZUH_ALLOWED_IPS:-10.20.0.0/16}"
-      - "traefik.http.routers.zabbix.middlewares=zabbix-ip,security-headers@file,compression@file"
-      - "traefik.http.services.zabbix.loadbalancer.server.port=6443"
+      - "traefik.http.routers.wazuh.rule=Host(`${WAZUH_WEB_HOST}`)"
+      - "traefik.http.routers.wazuh.entrypoints=websecure"
+      - "traefik.http.routers.wazuh.tls=true"
+      - "traefik.http.routers.wazuh.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+      #- "traefik.http.middlewares.wazuh-ip.ipallowlist.sourcerange=${WAZUH_ALLOWED_IPS:-10.20.0.0/16}"
+      - "traefik.http.routers.wazuh.middlewares=wazuh-ip,security-headers@file,compression@file"
+      - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
     #ports:
     #  - 6443:5601
     environment:
@@ -207,8 +207,6 @@ services:
     pull_policy: build
     restart: always
     container_name: wazuh.agent
-    networks:
-      - gestion_network
     # Respuesta activa con efecto real en R4: firewall-drop escribe en el
     # netfilter del namespace de red del contenedor; para que sea el del
     # host, el agente comparte la red del host y recibe solo NET_ADMIN
