@@ -134,8 +134,8 @@ services:
       - "traefik.http.middlewares.wazuh-ip.ipallowlist.sourcerange=${WAZUH_ALLOWED_IPS:-10.20.0.0/16}"
       - "traefik.http.routers.wazuh.middlewares=wazuh-ip,security-headers@file,compression@file"
       - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
-      - "traefik.http.services.wazuh.loadbalancer.server.scheme=https"
-      - "traefik.http.services.wazuh.loadbalancer.serverstransport=wazuh-tls@file"
+      #- "traefik.http.services.wazuh.loadbalancer.server.scheme=https"
+      #- "traefik.http.services.wazuh.loadbalancer.serverstransport=wazuh-tls@file"
     #ports:
     #  - 6443:5601
     environment:
