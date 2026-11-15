@@ -1,10 +1,21 @@
 # Wazuh App Copyright (C) 2017, Wazuh Inc. (License GPLv2) #
+############################
+# NETWORKS
+############################
+networks:
+  gestion_network:
+    external: true
+  traefik_proxy:                        
+    name: ${WAZUH_TRAEFIK_NETWORK}         
+    external: true
 services:
   wazuh.indexer:
     container_name: wazuh.indexer
     image: wazuh/wazuh-indexer:4.14.5
     hostname: wazuh.indexer
     restart: always
+    networks:
+      - gestion_network
     ports:
       - "9200:9200"
     environment:
@@ -53,21 +64,8 @@ services:
     image: wazuh/wazuh-manager:4.14.5
     hostname: wazuh.manager
     restart: always
-    #deploy:
-    #  resources:
-    #    limits:
-    #      memory: 1.5G
-    #      cpus: "1.5"
-    #    reservations:
-    #      memory: 512M
-    #      cpus: "1.0"
-    #ulimits:
-    #  memlock:
-    #    soft: 2147483648
-    #    hard: 2147483648
-    #  nofile:
-    #    soft: 655360
-    #    hard: 655360
+    networks:
+      - gestion_network
     ports:
       - "1514:1514"
       - "1515:1515"
@@ -123,14 +121,11 @@ services:
     image: wazuh/wazuh-dashboard:4.14.5
     hostname: wazuh.dashboard
     restart: always
-    #deploy:
-    #  resources:
-    #    limits:
-    #      memory: 1G
-    #      cpus: "1.0"
-    #    reservations:
-    #      memory: 512M
-    #      cpus: "0.5"
+    networks:
+      - gestion_network
+      - traefik_proxy
+    labels:
+      - traefik.docker.network=${WAZUH_TRAEFIK_NETWORK}
     ports:
       - 6443:5601
     environment:
@@ -176,6 +171,8 @@ services:
     image: alpine/curl:latest
     restart: "no"
     env_file: .env
+    networks:
+      - gestion_network
     volumes:
       - ./${CONFIG_SERVER_SCRIPT}:/init.sh:ro
     entrypoint: ["sh", "-c", "apk add --no-cache bash && exec bash /init.sh"]
@@ -202,6 +199,8 @@ services:
     pull_policy: build
     restart: always
     container_name: wazuh.agent
+    networks:
+      - gestion_network
     # Respuesta activa con efecto real en R4: firewall-drop escribe en el
     # netfilter del namespace de red del contenedor; para que sea el del
     # host, el agente comparte la red del host y recibe solo NET_ADMIN

@@ -1,36 +1,36 @@
 #!/bin/sh
 # ---------------------------------------------------------------------------
-# Configure the Wazuh agent after the container starts
+# Configurar el agente Wazuh después de iniciar el contenedor
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Stop execution on errors or undefined variables
+# Detener la ejecución ante errores o variables sin definir
 # ---------------------------------------------------------------------------
 set -eu
 
 # ---------------------------------------------------------------------------
-# Install the version-controlled declarative configuration from the repository
+# Instalar la configuración declarativa versionada en el repositorio
 # ---------------------------------------------------------------------------
 cp /opt/ossec.conf.tpl /var/ossec/etc/ossec.conf
 chown root:wazuh /var/ossec/etc/ossec.conf
 chmod 640 /var/ossec/etc/ossec.conf
 
 # ---------------------------------------------------------------------------
-# Set up the enrollment password only if the agent has not enrolled yet
+# Preparar la contraseña de enrolamiento solo si el agente aún no está enrolado
 # ---------------------------------------------------------------------------
 if [ ! -s /var/ossec/etc/client.keys ]; then
-    echo "🔑 client.keys not found: starting agent enrollment."
+    echo "🔑 Sin client.keys: se va a enrolar."
     cp /opt/authd.pass /var/ossec/etc/authd.pass
     chown root:wazuh /var/ossec/etc/authd.pass
     chmod 640 /var/ossec/etc/authd.pass
-    echo "🔐 authd.pass permissions updated."
+    echo "🔐 Permisos de authd.pass ajustados."
 else
-    echo "✅ client.keys found: skipping enrollment."
+    echo "✅ client.keys presente: no se re-enrola."
     rm -f /var/ossec/etc/authd.pass
 fi
 
 # ---------------------------------------------------------------------------
-# Get the manager address from an argument or the environment
+# Obtener la dirección del manager desde el argumento o el entorno
 # ---------------------------------------------------------------------------
 if [ -n "${1:-}" ]; then
     MANAGER="$1"
@@ -46,26 +46,26 @@ if [ -n "$MANAGER" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Configure the enrollment group when one is defined
+# Configurar el grupo de enrolamiento cuando esté definido
 # ---------------------------------------------------------------------------
 if [ -n "${WAZUH_AGENT_GROUP:-}" ]; then
-    echo "Enrollment group: ${WAZUH_AGENT_GROUP}"
+    echo "Grupo de enrolamiento: ${WAZUH_AGENT_GROUP}"
     sed -i "/<enrollment>/,/<\/enrollment>/ s|<groups>.*</groups>|<groups>${WAZUH_AGENT_GROUP}</groups>|" \
         /var/ossec/etc/ossec.conf
 fi
 
 # ---------------------------------------------------------------------------
-# Configure the agent name during enrollment
-# With network_mode: host, set it explicitly in <enrollment> because
-# Compose cannot assign the container's host name.
+# Configurar el nombre del agente durante el enrolamiento
+# Con network_mode: host, definirlo explícitamente en <enrollment> porque
+# Compose no puede asignar el nombre de host del contenedor.
 # ---------------------------------------------------------------------------
 if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
-    echo "Agent name: ${WAZUH_AGENT_NAME}"
+    echo "Nombre del agente: ${WAZUH_AGENT_NAME}"
     sed -i "/<enrollment>/,/<\/enrollment>/ s|<enabled>yes</enabled>|&\n      <agent_name>${WAZUH_AGENT_NAME}</agent_name>|" \
         /var/ossec/etc/ossec.conf
 fi
 
 # ---------------------------------------------------------------------------
-# Hand control over to the image's original entry point
+# Transferir el control al punto de entrada original de la imagen
 # ---------------------------------------------------------------------------
 exec /init "$@"

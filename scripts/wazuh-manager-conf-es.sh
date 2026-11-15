@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Prepare the Wazuh manager before agents enroll
-# Create groups, upload their configurations and rules, validate the changes,
-# and restart the manager. Allow the script to be run again without duplicates.
+# Preparar el manager Wazuh antes de que se enrolen los agentes
+# Crear los grupos, cargar sus configuraciones y reglas, validar los cambios
+# y reiniciar el manager. Permitir volver a ejecutar el script sin duplicarlos.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Define the colors used in script messages
+# Definir los colores usados en los mensajes del script
 # ---------------------------------------------------------------------------
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,7 +17,7 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 # ---------------------------------------------------------------------------
-# Print a section heading in the specified color
+# Imprimir un título de sección con el color indicado
 # ---------------------------------------------------------------------------
 
 print_section() {
@@ -30,12 +30,12 @@ print_section() {
 }
 
 # ---------------------------------------------------------------------------
-# Stop execution on errors or undefined variables
+# Detener la ejecución ante errores o variables sin definir
 # ---------------------------------------------------------------------------
 set -eu
 
 # ---------------------------------------------------------------------------
-# Read the credentials, TLS options, and deployment paths
+# Leer las credenciales, las opciones de TLS y las rutas de despliegue
 # ---------------------------------------------------------------------------
 API="${WAZUH_API_URL:-https://wazuh.manager:55000}"
 USER="${WAZUH_API_USER:-wazuh-wui}"
@@ -43,7 +43,7 @@ PASS="${WAZUH_API_PASSWORD:?WAZUH_API_PASSWORD must be set in .env}"
 INSECURE="${WAZUH_API_INSECURE:-0}"
 
 # ---------------------------------------------------------------------------
-# Define host paths and adjust them if the deployment uses different locations
+# Definir las rutas del host y ajustarlas si el despliegue usa otras ubicaciones
 # ---------------------------------------------------------------------------
 DATABUS_PATH="${DATABUS_PATH:-/home/databus}"
 INFOBUS_PATH="${INFOBUS_PATH:-/home/infobus}"
@@ -53,37 +53,37 @@ ZABBIX_PATH="${ZABBIX_PATH:-/home/zabbix}"
 AGENT_GROUPS="databus infobus monitoring"
 
 # ---------------------------------------------------------------------------
-# Log an informational message to standard output
+# Registrar un mensaje informativo en la salida estándar
 # ---------------------------------------------------------------------------
 log()  { echo "[INFO] $*"; }
 # ---------------------------------------------------------------------------
-# Display a warning on standard error
+# Mostrar una advertencia en la salida de error
 # ---------------------------------------------------------------------------
 warn() { echo "[WARN] $*" >&2; }
 # ---------------------------------------------------------------------------
-# Display an error and exit the script
+# Mostrar un error y finalizar el script
 # ---------------------------------------------------------------------------
 error()  { echo "[ERROR] $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Check the dependencies required to query the API
+# Verificar las dependencias necesarias para consultar la API
 # ---------------------------------------------------------------------------
-command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || error "curl is missing"; }
-command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || error "jq is missing"; }
+command -v curl >/dev/null 2>&1 || { apk add --no-cache curl >/dev/null 2>&1 || error "falta curl"; }
+command -v jq   >/dev/null 2>&1 || { apk add --no-cache jq   >/dev/null 2>&1 || error "falta jq"; }
 
 CURL_TLS=""
 
 if [ "$INSECURE" = "1" ]; then
-    warn "(WAZUH_API_INSECURE=1). Use only on an internal network."
+    warn "(WAZUH_API_INSECURE=1). Aceptable solo en red interna."
     CURL_TLS="-k"
 else
-    error "Explicitly set WAZUH_API_INSECURE=1."
+    error "Defina WAZUH_API_INSECURE=1 de forma explícita."
 fi
 
 # ---------------------------------------------------------------------------
-# Get and renew the API authentication token before it expires
-# The JWT is valid for 900 seconds, so renewing it before the restart avoids
-# using an expired token.
+# Obtener y renovar el token de autenticación de la API antes de que expire
+# El JWT tiene una vigencia de 900 segundos, por lo que renovarlo antes del
+# reinicio evita usar un token vencido.
 # ---------------------------------------------------------------------------
 try_authenticate() {
     TOKEN=$(curl -s $CURL_TLS -u "${USER}:${PASS}" \
@@ -95,26 +95,26 @@ try_authenticate() {
 }
 
 # ---------------------------------------------------------------------------
-# Require the API to accept the configured credentials
+# Exigir que la API acepte las credenciales configuradas
 # ---------------------------------------------------------------------------
 authenticate() {
-    try_authenticate || error "API rejected the credentials (user ${USER})"
+    try_authenticate || error "credenciales rechazadas por la API (usuario ${USER})"
 }
 
 # ---------------------------------------------------------------------------
-# Wait until authentication succeeds or the retries are exhausted
+# Esperar hasta que la API permita autenticarse o se agoten los reintentos
 # ---------------------------------------------------------------------------
 wait_for_api() {
     i=0
     until try_authenticate; do
         i=$((i + 1))
-        [ "$i" -ge 36 ] && error "API did not accept credentials within 180 seconds"
+        [ "$i" -ge 36 ] && error "la API no acepto credenciales en 180 s"
         sleep 5
     done
 }
 
 # ---------------------------------------------------------------------------
-# Send an API request using the specified method, path, and body
+# Enviar una solicitud a la API con el método, la ruta y el cuerpo indicados
 # ---------------------------------------------------------------------------
 api() {
     _m="$1"; _p="$2"; _ct="${3:-}"; _b="${4:-}"
@@ -130,42 +130,42 @@ api() {
 }
 
 # ---------------------------------------------------------------------------
-# Validate the response and stop on unexpected errors
+# Validar la respuesta y detenerse ante errores no tolerados
 # ---------------------------------------------------------------------------
 check() {
     _resp="$1"; _what="$2"
     if echo "$_resp" | jq -e '.title? // (.error? | select(. != 0))' >/dev/null 2>&1; then
-        warn "Response: $_resp"
-        error "${_what}: API rejected the operation"
+        warn "respuesta: $_resp"
+        error "${_what}: la API rechazó la operación"
     fi
     log "  ${_what}: ok"
 }
 
-log "Waiting for the API at ${API} ..."
+log "Esperando la API en ${API} ..."
 wait_for_api
-log "API is available. Authenticated as ${USER}."
+log "API disponible. Autenticado como ${USER}."
 
 # ---------------------------------------------------------------------------
-# Create the agent groups if they do not already exist
+# Crear los grupos de agentes si todavía no existen
 # ---------------------------------------------------------------------------
-log "Creating groups ..."
+log "Creando grupos ..."
 for g in $AGENT_GROUPS; do
     if api GET "/groups?groups_list=${g}" \
          | jq -e --arg g "$g" '.data.affected_items[]? | select(.name == $g)' >/dev/null 2>&1; then
-        log "  group ${g}: already exists"
+        log "  grupo ${g}: ya existe"
     else
         r=$(api POST "/groups" "application/json" "{\"group_id\":\"${g}\"}")
-        check "$r" "group ${g}"
+        check "$r" "grupo ${g}"
     fi
 done
 
 # ---------------------------------------------------------------------------
-# Configure log collection and integrity monitoring for the databus group
+# Configurar la recopilación de logs y la integridad del grupo databus
 # ---------------------------------------------------------------------------
-# Exclude environment-file differences so their sensitive contents do not
-# appear in integrity alerts.
+# Excluir las diferencias de los archivos de entorno para evitar que sus
+# contenidos sensibles aparezcan en las alertas de integridad.
 # ---------------------------------------------------------------------------
-log "Uploading agent.conf for the databus group ..."
+log "Subiendo agent.conf del grupo databus ..."
 AGENT_CONF_DATABUS=$(cat <<XML
 <agent_config>
 
@@ -191,12 +191,12 @@ AGENT_CONF_DATABUS=$(cat <<XML
 XML
 )
 r=$(api PUT "/groups/databus/configuration" "application/xml" "$AGENT_CONF_DATABUS")
-check "$r" "agent.conf for databus"
+check "$r" "agent.conf de databus"
 
 # ---------------------------------------------------------------------------
-# Configure log collection and integrity monitoring for the infobus group
+# Configurar la recopilación de logs y la integridad del grupo infobus
 # ---------------------------------------------------------------------------
-log "Uploading agent.conf for the infobus group ..."
+log "Subiendo agent.conf del grupo infobus ..."
 AGENT_CONF_INFOBUS=$(cat <<XML
 <agent_config>
 
@@ -222,20 +222,20 @@ AGENT_CONF_INFOBUS=$(cat <<XML
 XML
 )
 r=$(api PUT "/groups/infobus/configuration" "application/xml" "$AGENT_CONF_INFOBUS")
-check "$r" "agent.conf for infobus"
+check "$r" "agent.conf de infobus"
 
 # ---------------------------------------------------------------------------
-# Configure log collection and integrity monitoring for the monitoring group
+# Configurar la recopilación de logs y la integridad del grupo monitoring
 # ---------------------------------------------------------------------------
-# Use auth.log as a source with source IP addresses to validate active responses
-# on the host running the monitoring service.
+# Usar auth.log como fuente con dirección IP de origen para validar respuestas
+# activas en el host que ejecuta el monitoreo.
 # ---------------------------------------------------------------------------
-log "Uploading agent.conf for the monitoring group ..."
+log "Subiendo agent.conf del grupo monitoring ..."
 AGENT_CONF_MONITORING=$(cat <<XML
 <agent_config>
 
-  <!-- The only project source that includes srcip; active responses can be
-       demonstrated using this source. -->
+  <!-- Unica fuente del proyecto que trae srcip: es donde la respuesta
+       activa se puede demostrar. -->
   <localfile>
     <log_format>syslog</log_format>
     <location>/var/log/auth.log</location>
@@ -246,8 +246,8 @@ AGENT_CONF_MONITORING=$(cat <<XML
     <location>/var/lib/docker/containers/*/*-json.log</location>
   </localfile>
 
-  <!-- Integrity monitoring for the monitoring system itself.
-       The .env files for both stacks contain all credentials. -->
+  <!-- Integridad de la configuracion del propio sistema de monitoreo.
+       Los .env de ambos stacks concentran todas las credenciales. -->
   <syscheck>
     <disabled>no</disabled>
     <scan_on_start>yes</scan_on_start>
@@ -269,130 +269,130 @@ AGENT_CONF_MONITORING=$(cat <<XML
 XML
 )
 r=$(api PUT "/groups/monitoring/configuration" "application/xml" "$AGENT_CONF_MONITORING")
-check "$r" "agent.conf for monitoring"
+check "$r" "agent.conf de monitoring"
 
 # ---------------------------------------------------------------------------
-# Load project-specific rules within the reserved range
+# Cargar las reglas propias del proyecto dentro del rango reservado
 # ---------------------------------------------------------------------------
-log "Uploading local_rules.xml ..."
+log "Subiendo local_rules.xml ..."
 LOCAL_RULES=$(cat <<'XML'
 <group name="simovilab,">
 
-  <!-- Thesis-project rules for databus/infobus monitoring (simovilab, UCR).
-       Each rule corresponds to a finding documented in section 7.3.1.
-       Range reserved for custom rules: 100000+. -->
+  <!-- Reglas del TFG - monitoreo de databus/infobus (simovilab, UCR).
+       Cada regla corresponde a un hallazgo documentado en 7.3.1.
+       Rango reservado para reglas propias: 100000+. -->
 
   <rule id="100100" level="0">
     <decoded_as>json</decoded_as>
     <field name="stream">stdout|stderr</field>
-    <description>Docker container log line</description>
+    <description>Linea de log de contenedor Docker</description>
   </rule>
 
-  <!-- R1: GTFS import failure (H11) -->
+  <!-- R1: fallo de importacion del GTFS (H11) -->
   <rule id="100101" level="10">
     <if_sid>100100</if_sid>
     <field name="log">GTFS Schedule bootstrap failed|Import failed for provider|IntegrityError</field>
-    <description>databus: GTFS Schedule import failed</description>
+    <description>databus: fallo al importar el GTFS Schedule</description>
     <group>gtfs_integrity,</group>
   </rule>
 
-  <!-- R2: HTTP host rejected (H12) -->
+  <!-- R2: host HTTP rechazado (H12) -->
   <rule id="100102" level="8">
     <if_sid>100100</if_sid>
     <field name="log">DisallowedHost|Invalid HTTP_HOST header</field>
-    <description>Request rejected by ALLOWED_HOSTS</description>
+    <description>Peticion rechazada por ALLOWED_HOSTS</description>
     <group>recon,</group>
   </rule>
 
   <rule id="100103" level="12" frequency="8" timeframe="120">
     <if_matched_sid>100102</if_matched_sid>
-    <description>Host name scan: 8 requests rejected within 120 s</description>
+    <description>Barrido de nombres de host, 8 rechazos en 120 s</description>
     <group>recon,</group>
   </rule>
 
-  <!-- R3: application 5xx error -->
+  <!-- R3: error 5xx de la aplicacion -->
   <rule id="100104" level="7">
     <if_sid>100100</if_sid>
     <field name="log">Internal Server Error:</field>
-    <description>Django 5xx response</description>
+    <description>Respuesta 5xx de Django</description>
   </rule>
 
-  <!-- R4: route enumeration -->
+  <!-- R4: enumeracion de rutas -->
   <rule id="100105" level="3">
     <if_sid>100100</if_sid>
     <field name="log">Not Found: </field>
-    <description>404 response for a nonexistent route</description>
+    <description>404 en ruta inexistente</description>
   </rule>
 
   <rule id="100106" level="10" frequency="20" timeframe="60">
     <if_matched_sid>100105</if_matched_sid>
-    <description>Burst of 404 responses: route enumeration</description>
+    <description>Rafaga de 404, enumeracion de rutas</description>
     <group>recon,</group>
   </rule>
 
-  <!-- R5: Redis authentication failure -->
+  <!-- R5: autenticacion fallida en Redis -->
   <rule id="100107" level="9">
     <if_sid>100100</if_sid>
     <field name="log">WRONGPASS|NOAUTH</field>
-    <description>Redis authentication failed</description>
+    <description>Autenticacion fallida contra Redis</description>
     <group>authentication_failed,</group>
   </rule>
 
-  <!-- R6: unlimited retries in the event stream (H9, infobus) -->
+  <!-- R6: reintento infinito en el flujo de eventos (H9, infobus) -->
    <rule id="100108" level="3">
     <if_sid>100100</if_sid>
     <field name="log">Failed to process update event</field>
-    <description>infobus: failed to process an update event</description>
+    <description>infobus: fallo al procesar un evento de actualizacion</description>
   </rule>
 
   <rule id="100110" level="7" frequency="5" timeframe="300">
     <if_matched_sid>100108</if_matched_sid>
-    <description>infobus: event retried without limit and without dead-letter handling</description>
+    <description>infobus: evento reprocesado sin limite, sin dead-letter</description>
     <group>gtfs_integrity,</group>
   </rule>
 
-  <!-- R7: code cloned from the network during startup (H15) -->
+  <!-- R7: codigo clonado desde la red en arranque (H15) -->
   <rule id="100109" level="6">
     <if_sid>100100</if_sid>
     <field name="log">Cloning gtfs-\w+ repository</field>
-    <description>databus: code cloned from GitHub during a cold start</description>
+    <description>databus: codigo clonado desde GitHub en arranque en frio</description>
     <group>supply_chain,</group>
   </rule>
 
-  <!-- R8: configuration or secrets changed -->
+  <!-- R8: cambio en configuracion o secretos -->
   <rule id="100120" level="12">
     <if_sid>550,553,554</if_sid>
     <field name="file">.env|compose.prod.yml</field>
-    <description>Deployment configuration or secrets changed</description>
+    <description>Cambio en configuracion o secretos del despliegue</description>
     <group>syscheck,</group>
   </rule>
 
-  <!-- R9: published GTFS changed -->
+  <!-- R9: cambio en el GTFS publicado -->
   <rule id="100121" level="10">
     <if_sid>550,553,554</if_sid>
     <field name="file">databus_feed_files</field>
-    <description>databus: published GTFS Schedule changed</description>
+    <description>databus: cambio en el GTFS Schedule publicado</description>
     <group>syscheck,gtfs_integrity,</group>
   </rule>
 
-  <!-- R10: Docker socket (accepted risk) -->
+  <!-- R10: socket de Docker (riesgo aceptado) -->
   <rule id="100122" level="12">
     <if_sid>550,554</if_sid>
     <field name="file">docker.sock</field>
-    <description>Docker socket changed</description>
+    <description>Cambio en el socket de Docker</description>
     <group>syscheck,</group>
   </rule>
 
-   <!-- R11: malformed events sent to the dead-letter queue (infobus) -->
+   <!-- R11: eventos malformados enviados a la cola muerta (infobus) -->
   <rule id="100111" level="5">
     <if_sid>100100</if_sid>
     <field name="log">Invalid update event</field>
-    <description>infobus: malformed update event sent to the dead-letter queue</description>
+    <description>infobus: evento de actualizacion malformado, enviado a dead-letter</description>
   </rule>
 
   <rule id="100112" level="9" frequency="10" timeframe="600">
     <if_matched_sid>100111</if_matched_sid>
-    <description>infobus: producer is continuously sending malformed events</description>
+    <description>infobus: productor enviando eventos malformados de forma sostenida</description>
     <group>availability,</group>
   </rule>
 
@@ -409,9 +409,9 @@ r=$(curl -s $CURL_TLS -X PUT "${API}/rules/files/local_rules.xml?overwrite=true"
 check "$r" "local_rules.xml"
 
 # ---------------------------------------------------------------------------
-# Validate the configuration before restarting the manager
+# Validar la configuración antes de reiniciar el manager
 # ---------------------------------------------------------------------------
-log "Validating the manager configuration ..."
+log "Validando la configuración del manager ..."
 status=""
 i=0
 while [ "$i" -lt 6 ]; do
@@ -419,37 +419,37 @@ while [ "$i" -lt 6 ]; do
     status=$(echo "$r" | jq -r '(.data.affected_items[0].status // .data.status // "unknown")' 2>/dev/null)
     [ "$status" = "OK" ] && break
     i=$((i + 1))
-    warn "Validation attempt ${i}/6: status=${status:-empty}"
+    warn "validacion intento ${i}/6: status=${status:-vacio}"
     sleep 5
 done
 
 if [ "$status" != "OK" ]; then
-    warn "Response: $r"
+    warn "respuesta: $r"
     echo "$r" | jq -r '.data.affected_items[0].details[]? // empty' >&2 || true
-    error "Configuration is invalid (status=${status:-empty}); the manager will NOT be restarted"
+    error "la configuración no valida (status=${status:-vacio}); NO se reinicia el manager"
 fi
-log "  Configuration is valid."
+log "  configuración válida."
 # ---------------------------------------------------------------------------
-# Renew the token and restart the manager
+# Renovar el token y reiniciar el manager
 # ---------------------------------------------------------------------------
-# Reauthenticate before restarting to avoid using an expired JWT.
+# Reautenticar antes del reinicio para evitar usar un JWT que haya expirado.
 # ---------------------------------------------------------------------------
 authenticate
-log "Restarting the manager ..."
+log "Reiniciando el manager ..."
 r=$(api PUT "/manager/restart")
-check "$r" "manager restart"
+check "$r" "reinicio del manager"
 
 sleep 10
 wait_for_api
-log "API is available after the restart."
+log "API lista tras el reinicio."
 
 # ---------------------------------------------------------------------------
-# Display the group summary and enrollment instructions
+# Mostrar el resumen de grupos y las instrucciones de enrolamiento
 # ---------------------------------------------------------------------------
 
-log "Existing groups:"
-api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agents: \(.count))"'
+log "Grupos existentes:"
+api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agentes: \(.count))"'
 
-log "Done. The manager is ready to accept registrations; agents can enroll in:"
-log "  R3 -> group 'databus'   R2 -> group 'infobus'   R4 -> group 'monitoring'"
+log "Listo. El manager acepta registros; los agentes pueden enrolarse con:"
+log "  R3 -> grupo 'databus'   R2 -> grupo 'infobus'   R4 -> grupo 'monitoring'"
 exit 0
