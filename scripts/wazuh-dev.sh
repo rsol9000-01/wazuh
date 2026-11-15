@@ -46,7 +46,7 @@ print_section() {
 # Defines the networks to check and create if they do not exist
 # ---------------------------------------------------------------------------
 
-WAZUH_TRAEFIK_NETWOK="$(grep '^WAZUH_TRAEFIK_NETWOK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')"
+WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')"
 WAZUH_GESTION_NETWORK="gestion_network"
 
 check_networks() {
