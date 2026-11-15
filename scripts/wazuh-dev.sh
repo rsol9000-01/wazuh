@@ -46,9 +46,6 @@ print_section() {
 # Defines the networks to check and create if they do not exist
 # ---------------------------------------------------------------------------
 
-WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')"
-WAZUH_GESTION_NETWORK="gestion_network"
-
 check_networks() {
   local red
   for red in "$@"; do
@@ -306,6 +303,12 @@ if [ ! -f ".env" ]; then
 fi
 echo "✅  The environment variables will be loaded from the .env file."
 
+# ---------------------------------------------------------------------------
+# Defines the networks to check and create if they do not exist
+# ---------------------------------------------------------------------------
+
+WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')"
+WAZUH_GESTION_NETWORK="gestion_network"
 
 # ---------------------------------------------------------------------------
 # Verify that the selected Docker Compose file exists
@@ -539,8 +542,10 @@ fi
 # ---------------------------------------------------------------------------
 # Checking required networks before running Compose
 # ---------------------------------------------------------------------------
-
-check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
+if [ "$FLAG_SERVER" = "true" ]; then
+  echo "ℹ️  Server mode: checking required networks..."
+  check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
+fi  
 
 # ---------------------------------------------------------------------------
 # Run the requested action with Docker Compose
