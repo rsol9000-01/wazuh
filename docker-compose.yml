@@ -126,18 +126,22 @@ services:
       - traefik_proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=${WAZUH_TRAEFIK_NETWORK}"
-      - "traefik.http.routers.wazuh.rule=Host(`${WAZUH_WEB_HOST}`)"
-      - "traefik.http.routers.wazuh.entrypoints=websecure"
-      - "traefik.http.routers.wazuh.tls=true"
-      - "traefik.http.routers.wazuh.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.middlewares.wazuh-ip.ipallowlist.sourcerange=${WAZUH_ALLOWED_IPS:-10.20.0.0/16}"
-      - "traefik.http.middlewares.wazuh-headers.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.wazuh-headers.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.wazuh-headers.headers.customFrameOptionsValue=SAMEORIGIN"
-      - "traefik.http.middlewares.wazuh-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
-      - "traefik.http.routers.wazuh.middlewares=wazuh-ip,wazuh-headers,compression@file"
-      - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
+      - "traefik.docker.network=${ZBX_TRAEFIK_NETWORK}"
+      - "traefik.http.routers.zabbix.rule=Host(`${ZBX_WEB_HOST}`)"
+      - "traefik.http.routers.zabbix.entrypoints=websecure"
+      - "traefik.http.routers.zabbix.tls=true"
+      - "traefik.http.routers.zabbix.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.middlewares.zabbix-ip.ipallowlist.sourcerange=${ZBX_ALLOWED_IPS:-10.20.0.0/16}"
+      # Cabeceras de seguridad propias de Zabbix: las mismas de security-headers, sin la CSP
+      - "traefik.http.middlewares.zabbix-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.zabbix-headers.headers.customFrameOptionsValue=SAMEORIGIN"
+      - "traefik.http.middlewares.zabbix-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.zabbix-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.zabbix-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.zabbix-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.zabbix-headers.headers.customResponseHeaders.X-Robots-Tag=none,noarchive,nosnippet,notranslate,noimageindex"
+      - "traefik.http.routers.zabbix.middlewares=zabbix-ip,zabbix-headers,compression@file"
+      - "traefik.http.services.zabbix.loadbalancer.server.port=8080"
     #ports:
     #  - 6443:5601
     environment:
