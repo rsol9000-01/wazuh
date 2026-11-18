@@ -43,6 +43,21 @@ print_section() {
 }
 
 # ---------------------------------------------------------------------------
+# Comprobar y crear las redes indicadas si todavía no existen
+# ---------------------------------------------------------------------------
+check_networks() {
+  local red
+  for red in "$@"; do
+    if docker network inspect "$red" >/dev/null 2>&1; then
+      echo "Red '$red': la red ya existe."
+    else
+      echo "Red '$red': no se encontró. Creando red..."
+      docker network create "$red" >/dev/null
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
 # Validar que la contraseña cumpla los requisitos de longitud y caracteres
 # ---------------------------------------------------------------------------
 validate_password() {
@@ -515,6 +530,33 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo "🔐  Generating self-signed certificates..."
   docker compose -f generate-indexer-certs.yml run --rm generator
   echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
+fi
+
+# ---------------------------------------------------------------------------
+# Comprobar las redes necesarias antes de ejecutar Compose
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  WAZUH_GESTION_NETWORK="gestion_network"
+  echo "ℹ️  Modo servidor: comprobando las redes necesarias..."
+  check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
+fi
+
+# ---------------------------------------------------------------------------
+# En modo agente, la red de la aplicación debe existir previamente
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "false" ]; then
+  AGENT_DOCKER_NETWORK="$(grep '^AGENT_DOCKER_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  if [ -z "$AGENT_DOCKER_NETWORK" ]; then
+    echo "❌  Error: AGENT_DOCKER_NETWORK no está definida en .env"
+    exit 1
+  fi
+  if ! docker network inspect "$AGENT_DOCKER_NETWORK" >/dev/null 2>&1; then
+    echo "❌  Error: la red Docker '$AGENT_DOCKER_NETWORK' no existe."
+    echo "    Inicie primero la infraestructura de la aplicación o corrija AGENT_DOCKER_NETWORK en .env."
+    exit 1
+  fi
+  echo "✅  Red '$AGENT_DOCKER_NETWORK' encontrada"
 fi
 
 # ---------------------------------------------------------------------------
