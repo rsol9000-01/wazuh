@@ -543,9 +543,29 @@ fi
 # Checking required networks before running Compose
 # ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
+  WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  WAZUH_GESTION_NETWORK="gestion_network"
   echo "ℹ️  Server mode: checking required networks..."
   check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
 fi  
+
+# ---------------------------------------------------------------------------
+# Agent mode: the application network must already exist
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "false" ]; then
+  AGENT_DOCKER_NETWORK="$(grep '^AGENT_DOCKER_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  if [ -z "$AGENT_DOCKER_NETWORK" ]; then
+    echo "❌  Error: AGENT_DOCKER_NETWORK is not set in .env"
+    exit 1
+  fi
+  if ! docker network inspect "$AGENT_DOCKER_NETWORK" >/dev/null 2>&1; then
+    echo "❌  Error: Docker network '$AGENT_DOCKER_NETWORK' does not exist."
+    echo "    Start the application stack first, or fix AGENT_DOCKER_NETWORK in .env."
+    exit 1
+  fi
+  echo "✅  Network '$AGENT_DOCKER_NETWORK' found"
+fi
+
 
 # ---------------------------------------------------------------------------
 # Run the requested action with Docker Compose
