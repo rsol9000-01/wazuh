@@ -303,12 +303,6 @@ if [ ! -f ".env" ]; then
 fi
 echo "✅  The environment variables will be loaded from the .env file."
 
-# ---------------------------------------------------------------------------
-# Defines the networks to check and create if they do not exist
-# ---------------------------------------------------------------------------
-
-WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//')"
-WAZUH_GESTION_NETWORK="gestion_network"
 
 # ---------------------------------------------------------------------------
 # Verify that the selected Docker Compose file exists
@@ -318,6 +312,42 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
+
+# ---------------------------------------------------------------------------
+# Set the server time zone and check clock synchronization
+# ---------------------------------------------------------------------------
+# Containers take their time zone from TZ in .env. The server uses the same zone
+# so system logs, cron and the containers that mount /etc/localtime show the same
+# time. The time itself comes from the server clock, which must be synchronized
+# by NTP to match the remote agents. Server mode only: agent hosts are not ours.
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  HOST_TZ=$(grep '^TZ[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$HOST_TZ" ]; then
+    echo "❌  Error: TZ is not set in .env (example: TZ=America/Costa_Rica)"
+    exit 1
+  fi
+  if [ ! -e "/usr/share/zoneinfo/$HOST_TZ" ]; then
+    echo "❌  Error: invalid time zone in .env: TZ=$HOST_TZ"
+    exit 1
+  fi
+  if command -v timedatectl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    if [ "$(timedatectl show -p Timezone --value)" != "$HOST_TZ" ]; then
+      timedatectl set-timezone "$HOST_TZ"
+    fi
+    timedatectl set-ntp true 2>/dev/null || true
+  else
+    ln -sf "/usr/share/zoneinfo/$HOST_TZ" /etc/localtime
+  fi
+  echo "$HOST_TZ" > /etc/timezone
+  echo "✅  Server time zone: $HOST_TZ ($(date '+%Y-%m-%d %H:%M %Z'))"
+  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+    echo "✅  Server clock synchronized by NTP"
+  else
+    echo "⚠️  The server clock does not show as synchronized by NTP."
+    echo "    Check: timedatectl. Inside an LXC the clock is the Proxmox host's: synchronize it on the host."
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Create and verify the internal users file in server mode
@@ -548,7 +578,6 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo "ℹ️  Server mode: checking required networks..."
   check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
 fi  
-
 # ---------------------------------------------------------------------------
 # Agent mode: the application network must already exist
 # ---------------------------------------------------------------------------
@@ -565,7 +594,6 @@ if [ "$FLAG_SERVER" = "false" ]; then
   fi
   echo "✅  Network '$AGENT_DOCKER_NETWORK' found"
 fi
-
 
 # ---------------------------------------------------------------------------
 # Run the requested action with Docker Compose

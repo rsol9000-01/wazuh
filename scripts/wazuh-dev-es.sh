@@ -43,6 +43,21 @@ print_section() {
 }
 
 # ---------------------------------------------------------------------------
+# Comprobar y crear las redes indicadas si todavía no existen
+# ---------------------------------------------------------------------------
+check_networks() {
+  local red
+  for red in "$@"; do
+    if docker network inspect "$red" >/dev/null 2>&1; then
+      echo "Red '$red': la red ya existe."
+    else
+      echo "Red '$red': no se encontró. Creando red..."
+      docker network create "$red" >/dev/null
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
 # Validar que la contraseña cumpla los requisitos de longitud y caracteres
 # ---------------------------------------------------------------------------
 validate_password() {
@@ -298,6 +313,43 @@ fi
 echo -e "✅  Docker Compose file found: ${GREEN}$COMPOSE_FILE${NC}"
 
 # ---------------------------------------------------------------------------
+# Fijar la zona horaria del servidor y revisar la sincronización del reloj
+# ---------------------------------------------------------------------------
+# Los contenedores toman su zona horaria de TZ en el .env. El servidor usa la misma
+# zona para que los logs del sistema, cron y los contenedores que montan
+# /etc/localtime muestren la misma hora. La hora en sí sale del reloj del servidor,
+# que debe estar sincronizado por NTP para coincidir con los agentes remotos.
+# Solo en modo servidor: los hosts de los agentes no son nuestros.
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  HOST_TZ=$(grep '^TZ[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)
+  if [ -z "$HOST_TZ" ]; then
+    echo "❌  Error: TZ no está definida en .env (ejemplo: TZ=America/Costa_Rica)"
+    exit 1
+  fi
+  if [ ! -e "/usr/share/zoneinfo/$HOST_TZ" ]; then
+    echo "❌  Error: zona horaria inválida en .env: TZ=$HOST_TZ"
+    exit 1
+  fi
+  if command -v timedatectl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    if [ "$(timedatectl show -p Timezone --value)" != "$HOST_TZ" ]; then
+      timedatectl set-timezone "$HOST_TZ"
+    fi
+    timedatectl set-ntp true 2>/dev/null || true
+  else
+    ln -sf "/usr/share/zoneinfo/$HOST_TZ" /etc/localtime
+  fi
+  echo "$HOST_TZ" > /etc/timezone
+  echo "✅  Zona horaria del servidor: $HOST_TZ ($(date '+%Y-%m-%d %H:%M %Z'))"
+  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+    echo "✅  Reloj del servidor sincronizado por NTP"
+  else
+    echo "⚠️  El reloj del servidor no aparece sincronizado por NTP."
+    echo "    Revisar: timedatectl. Dentro de un LXC el reloj es el del host Proxmox: sincronizarlo en el host."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Crear y verificar el archivo de usuarios internos en modo servidor
 # ---------------------------------------------------------------------------
 if [ "$FLAG_SERVER" = "true" ]; then
@@ -515,6 +567,33 @@ if [ "$FLAG_SERVER" = "true" ]; then
   echo "🔐  Generating self-signed certificates..."
   docker compose -f generate-indexer-certs.yml run --rm generator
   echo "✅  Certificates generated at ./config/wazuh_indexer_ssl_certs."
+fi
+
+# ---------------------------------------------------------------------------
+# Comprobar las redes necesarias antes de ejecutar Compose
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "true" ]; then
+  WAZUH_TRAEFIK_NETWORK="$(grep '^WAZUH_TRAEFIK_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  WAZUH_GESTION_NETWORK="gestion_network"
+  echo "ℹ️  Modo servidor: comprobando las redes necesarias..."
+  check_networks "$WAZUH_GESTION_NETWORK" "$WAZUH_TRAEFIK_NETWORK"
+fi
+
+# ---------------------------------------------------------------------------
+# En modo agente, la red de la aplicación debe existir previamente
+# ---------------------------------------------------------------------------
+if [ "$FLAG_SERVER" = "false" ]; then
+  AGENT_DOCKER_NETWORK="$(grep '^AGENT_DOCKER_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
+  if [ -z "$AGENT_DOCKER_NETWORK" ]; then
+    echo "❌  Error: AGENT_DOCKER_NETWORK no está definida en .env"
+    exit 1
+  fi
+  if ! docker network inspect "$AGENT_DOCKER_NETWORK" >/dev/null 2>&1; then
+    echo "❌  Error: la red Docker '$AGENT_DOCKER_NETWORK' no existe."
+    echo "    Inicie primero la infraestructura de la aplicación o corrija AGENT_DOCKER_NETWORK en .env."
+    exit 1
+  fi
+  echo "✅  Red '$AGENT_DOCKER_NETWORK' encontrada"
 fi
 
 # ---------------------------------------------------------------------------
