@@ -77,7 +77,7 @@ Es un stack single-node en Docker sobre srv-gestion, junto a Zabbix. `wazuh-init
 | todos | — | — | sin diff de `.env` ni `authd.pass` | 100120 configuración o secretos · 100122 socket Docker |
 
 > [!WARNING]
-> **La respuesta activa bloquea de verdad en srv-databus, srv-infobus y srv-gestion.** Los tres agentes comparten la red del host y tienen `NET_ADMIN`. SSH (5712, 5720, 5763) bloquea 180 s; Traefik (100132 fuerza bruta, 100134 escaneo de rutas) bloquea 1 h. Nunca se bloquea srv-gestion ni las redes internas de Docker.
+> **La respuesta activa bloquea de verdad en srv-databus, srv-infobus y srv-gestion.** Los tres agentes comparten la red del host y tienen `NET_ADMIN`. SSH (5712, 5720, 5763) bloquea 180 s; Traefik (100132 fuerza bruta, 100134 escaneo de rutas) bloquea 1 h. Nunca se bloquea a ninguno de los tres servidores ni a las redes internas de Docker.
 
 ## Lo que el diagrama deja ver
 
