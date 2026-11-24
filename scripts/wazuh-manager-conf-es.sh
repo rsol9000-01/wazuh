@@ -463,13 +463,14 @@ LOCAL_RULES=$(cat <<'XML'
 
   <!-- La misma ruta inexistente pedida una y otra vez, desde cualquier cliente:
        apunta a un cliente con una URL vieja o rota (una pantalla, una app, una
-       sonda), no a un ataque. Solo alerta, sin respuesta activa. ignore=600
-       deja una alerta cada 10 min mientras dure el problema. -->
-  <rule id="100136" level="7" frequency="100" timeframe="60" ignore="600">
+       sonda), no a un ataque. Solo alerta, sin respuesta activa. ignore=60
+       deja como maximo una alerta por minuto mientras dure el problema; en ese
+       minuto cada 404 sigue saliendo como 100133. -->
+  <rule id="100136" level="7" frequency="50" timeframe="60" ignore="60">
     <if_matched_sid>100133</if_matched_sid>
     <same_field>RequestHost</same_field>
     <same_field>RequestPath</same_field>
-    <description>Traefik: ruta inexistente pedida 100 veces en 60 s: $(RequestHost)$(RequestPath). Revisar por que la piden los clientes</description>
+    <description>Traefik: ruta inexistente pedida 50 veces en 60 s: $(RequestHost)$(RequestPath). Revisar por que la piden los clientes</description>
     <group>web,availability,</group>
   </rule>
 

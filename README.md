@@ -326,7 +326,7 @@ They use the range reserved for local rules (100100 and up).
 | 100133 | 3 | Traefik: 404 for … | A 404 response |
 | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 from the same client IP, each on a different path, within 60 s |
 | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 requests from the same client IP within 30 s |
-| 100136 | 7 | Traefik: missing route requested 100 times in 60 s | 100 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert every 10 min |
+| 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert per minute |
 
 Rules 100130–100136 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client.
 

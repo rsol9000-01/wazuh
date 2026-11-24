@@ -463,13 +463,14 @@ LOCAL_RULES=$(cat <<'XML'
 
   <!-- Same missing route requested over and over, from any client: points to a
        client with a stale or broken URL (a screen, an app, a probe), not an
-       attack. Alert only, no active response. ignore=600 keeps it to one
-       alert every 10 min while the problem lasts. -->
-  <rule id="100136" level="7" frequency="100" timeframe="60" ignore="600">
+       attack. Alert only, no active response. ignore=60 keeps it to at
+       most one alert per minute while the problem lasts; each 404 is still
+       raised by 100133 during that minute. -->
+  <rule id="100136" level="7" frequency="50" timeframe="60" ignore="60">
     <if_matched_sid>100133</if_matched_sid>
     <same_field>RequestHost</same_field>
     <same_field>RequestPath</same_field>
-    <description>Traefik: missing route requested 100 times in 60 s: $(RequestHost)$(RequestPath). Check why clients request it</description>
+    <description>Traefik: missing route requested 50 times in 60 s: $(RequestHost)$(RequestPath). Check why clients request it</description>
     <group>web,availability,</group>
   </rule>
 

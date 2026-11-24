@@ -1,0 +1,85 @@
+diff --git a/README es.md b/README es.md
+index a520475..3cb1693 100644
+--- a/README es.md	
++++ b/README es.md	
+@@ -326,7 +326,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
+ | 100133 | 3 | Traefik: 404 for … | Una respuesta 404 |
+ | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 desde la misma IP de cliente, cada una en una ruta distinta, en 60 s |
+ | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 peticiones desde la misma IP de cliente en 30 s |
+-| 100136 | 7 | Traefik: missing route requested 100 times in 60 s | 100 × 100133 en el mismo host y ruta, desde cualquier cliente, en 60 s. Solo alerta: un cliente con una URL vieja, no un ataque. Como máximo una alerta cada 10 min |
++| 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 en el mismo host y ruta, desde cualquier cliente, en 60 s. Solo alerta: un cliente con una URL vieja, no un ataque. Como máximo una alerta por minuto |
+ 
+ Las reglas 100130–100136 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
+ 
+diff --git a/README.md b/README.md
+index 96886ac..758d334 100644
+--- a/README.md
++++ b/README.md
+@@ -326,7 +326,7 @@ They use the range reserved for local rules (100100 and up).
+ | 100133 | 3 | Traefik: 404 for … | A 404 response |
+ | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 from the same client IP, each on a different path, within 60 s |
+ | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 requests from the same client IP within 30 s |
+-| 100136 | 7 | Traefik: missing route requested 100 times in 60 s | 100 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert every 10 min |
++| 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert per minute |
+ 
+ Rules 100130–100136 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client.
+ 
+diff --git a/docs/README-wazuh-manager-conf.md b/docs/README-wazuh-manager-conf.md
+index aad23a7..8fc9261 100644
+--- a/docs/README-wazuh-manager-conf.md
++++ b/docs/README-wazuh-manager-conf.md
+@@ -144,7 +144,7 @@ They use the range reserved for local rules (100100 and up), in the `simovilab`
+ | 100133 | 3 | 100130, `DownstreamStatus` 404 | Nonexistent route |
+ | 100134 | 10 | 50 × 100133 in 60 s, same `ClientHost`, different `RequestPath` | Route scan |
+ | 100135 | 10 | 3000 × 100130 in 30 s, same `ClientHost` | Flooding (100 requests per second) |
+-| 100136 | 7 | 100 × 100133 in 60 s, same `RequestHost` and `RequestPath`, any client; `ignore` 600 s | Missing route requested over and over: a client with a stale URL. Alert only |
++| 100136 | 7 | 50 × 100133 in 60 s, same `RequestHost` and `RequestPath`, any client; `ignore` 60 s | Missing route requested over and over: a client with a stale URL. Alert only |
+ 
+ ### Project decoders
+ 
+diff --git a/scripts/wazuh-manager-conf-es.sh b/scripts/wazuh-manager-conf-es.sh
+index 7bc4bad..62585e7 100644
+--- a/scripts/wazuh-manager-conf-es.sh
++++ b/scripts/wazuh-manager-conf-es.sh
+@@ -463,13 +463,14 @@ LOCAL_RULES=$(cat <<'XML'
+ 
+   <!-- La misma ruta inexistente pedida una y otra vez, desde cualquier cliente:
+        apunta a un cliente con una URL vieja o rota (una pantalla, una app, una
+-       sonda), no a un ataque. Solo alerta, sin respuesta activa. ignore=600
+-       deja una alerta cada 10 min mientras dure el problema. -->
+-  <rule id="100136" level="7" frequency="100" timeframe="60" ignore="600">
++       sonda), no a un ataque. Solo alerta, sin respuesta activa. ignore=60
++       deja como maximo una alerta por minuto mientras dure el problema; en ese
++       minuto cada 404 sigue saliendo como 100133. -->
++  <rule id="100136" level="7" frequency="50" timeframe="60" ignore="60">
+     <if_matched_sid>100133</if_matched_sid>
+     <same_field>RequestHost</same_field>
+     <same_field>RequestPath</same_field>
+-    <description>Traefik: ruta inexistente pedida 100 veces en 60 s: $(RequestHost)$(RequestPath). Revisar por que la piden los clientes</description>
++    <description>Traefik: ruta inexistente pedida 50 veces en 60 s: $(RequestHost)$(RequestPath). Revisar por que la piden los clientes</description>
+     <group>web,availability,</group>
+   </rule>
+ 
+diff --git a/scripts/wazuh-manager-conf.sh b/scripts/wazuh-manager-conf.sh
+index 51812ba..d22a9d8 100644
+--- a/scripts/wazuh-manager-conf.sh
++++ b/scripts/wazuh-manager-conf.sh
+@@ -463,13 +463,14 @@ LOCAL_RULES=$(cat <<'XML'
+ 
+   <!-- Same missing route requested over and over, from any client: points to a
+        client with a stale or broken URL (a screen, an app, a probe), not an
+-       attack. Alert only, no active response. ignore=600 keeps it to one
+-       alert every 10 min while the problem lasts. -->
+-  <rule id="100136" level="7" frequency="100" timeframe="60" ignore="600">
++       attack. Alert only, no active response. ignore=60 keeps it to at
++       most one alert per minute while the problem lasts; each 404 is still
++       raised by 100133 during that minute. -->
++  <rule id="100136" level="7" frequency="50" timeframe="60" ignore="60">
+     <if_matched_sid>100133</if_matched_sid>
+     <same_field>RequestHost</same_field>
+     <same_field>RequestPath</same_field>
+-    <description>Traefik: missing route requested 100 times in 60 s: $(RequestHost)$(RequestPath). Check why clients request it</description>
++    <description>Traefik: missing route requested 50 times in 60 s: $(RequestHost)$(RequestPath). Check why clients request it</description>
+     <group>web,availability,</group>
+   </rule>
+ 
