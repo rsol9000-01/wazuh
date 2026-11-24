@@ -44,6 +44,8 @@ services:
       - /var/lib/docker/volumes/databus_feed_files/_data:/var/lib/docker/volumes/databus_feed_files/_data:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
+      # Traefik access log (JSON). Wazuh reads it at /home/traefik/logs/access.log
+      - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
       - /etc/os-release:/etc/os-release:ro
       #- /sys:/sys:ro
       #- /etc:/host/etc:ro

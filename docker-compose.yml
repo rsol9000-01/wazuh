@@ -249,6 +249,8 @@ services:
       - ${ZABBIX_PATH}:${ZABBIX_PATH}:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
+      # Traefik access log (JSON). Wazuh reads it at /home/traefik/logs/access.log
+      - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
       - wazuh_agent_etc:/var/ossec/etc
       # - /etc:/host/etc:ro                     # opcional, para FIM del host
       # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario

@@ -174,6 +174,12 @@ AGENT_CONF_DATABUS=$(cat <<XML
     <location>/var/lib/docker/containers/*/*-json.log</location>
   </localfile>
 
+  <!-- Access log de Traefik: una línea JSON por petición, con la IP del cliente (ClientHost). -->
+  <localfile>
+    <log_format>json</log_format>
+    <location>/home/traefik/logs/access.log</location>
+  </localfile>
+
   <syscheck>
     <disabled>no</disabled>
     <scan_on_start>yes</scan_on_start>
@@ -203,6 +209,12 @@ AGENT_CONF_INFOBUS=$(cat <<XML
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
+  </localfile>
+
+  <!-- Access log de Traefik: una línea JSON por petición, con la IP del cliente (ClientHost). -->
+  <localfile>
+    <log_format>json</log_format>
+    <location>/home/traefik/logs/access.log</location>
   </localfile>
 
   <syscheck>
@@ -244,6 +256,12 @@ AGENT_CONF_MONITORING=$(cat <<XML
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
+  </localfile>
+
+  <!-- Access log de Traefik: una línea JSON por petición, con la IP del cliente (ClientHost). -->
+  <localfile>
+    <log_format>json</log_format>
+    <location>/home/traefik/logs/access.log</location>
   </localfile>
 
   <!-- Integridad de la configuracion del propio sistema de monitoreo.
@@ -396,6 +414,53 @@ LOCAL_RULES=$(cat <<'XML'
     <group>availability,</group>
   </rule>
 
+  <!-- R12: access log de Traefik (JSON). La detección por ClientHost funciona con el
+       decoder json incluido; el decoder local simovilab-traefik-srcip además copia
+       ClientHost a srcip para que la respuesta activa pueda bloquear al cliente. -->
+  <rule id="100130" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="entryPointName">\.+</field>
+    <field name="ClientHost">\.+</field>
+    <description>Traefik: peticion en el access log</description>
+  </rule>
+
+  <rule id="100131" level="5">
+    <if_sid>100130</if_sid>
+    <field name="DownstreamStatus" type="pcre2">^40[13]$</field>
+    <description>Traefik: acceso denegado ($(DownstreamStatus)) a $(RequestHost) desde $(ClientHost)</description>
+    <group>web,access_denied,</group>
+  </rule>
+
+  <rule id="100132" level="10" frequency="20" timeframe="60">
+    <if_matched_sid>100131</if_matched_sid>
+    <same_field>ClientHost</same_field>
+    <description>Traefik: fuerza bruta, 20 peticiones denegadas (401/403) en 60 s desde $(ClientHost)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>web,authentication_failures,</group>
+  </rule>
+
+  <rule id="100133" level="3">
+    <if_sid>100130</if_sid>
+    <field name="DownstreamStatus" type="pcre2">^404$</field>
+    <description>Traefik: 404 en $(RequestPath) desde $(ClientHost)</description>
+  </rule>
+
+  <rule id="100134" level="10" frequency="50" timeframe="60">
+    <if_matched_sid>100133</if_matched_sid>
+    <same_field>ClientHost</same_field>
+    <different_field>RequestPath</different_field>
+    <description>Traefik: barrido de rutas, 50 rutas inexistentes distintas en 60 s desde $(ClientHost)</description>
+    <mitre><id>T1595</id></mitre>
+    <group>web,recon,</group>
+  </rule>
+
+  <rule id="100135" level="10" frequency="3000" timeframe="30">
+    <if_matched_sid>100130</if_matched_sid>
+    <same_field>ClientHost</same_field>
+    <description>Traefik: inundacion, 3000 peticiones en 30 s (100 por s) desde $(ClientHost)</description>
+    <group>web,dos,</group>
+  </rule>
+
 </group>
 XML
 )
@@ -407,6 +472,32 @@ r=$(curl -s $CURL_TLS -X PUT "${API}/rules/files/local_rules.xml?overwrite=true"
       --data-binary @/tmp/local_rules.xml)
 
 check "$r" "local_rules.xml"
+
+
+# ---------------------------------------------------------------------------
+# Cargar los decoders propios del proyecto
+# ---------------------------------------------------------------------------
+log "Subiendo local_decoder.xml ..."
+LOCAL_DECODER=$(cat <<'XML'
+<!-- simovilab: decoders locales.
+     Access log de Traefik (JSON, una línea por petición). El decoder json incluido ya
+     extrae todos los campos (ClientHost, DownstreamStatus, RequestPath...). Este decoder
+     hijo solo copia ClientHost a srcip, el campo que usa firewall-drop para bloquear. -->
+<decoder name="simovilab-traefik-srcip">
+  <parent>json</parent>
+  <prematch>"entryPointName":</prematch>
+  <regex type="pcre2">"ClientHost":"([^"]+)"</regex>
+  <order>srcip</order>
+</decoder>
+XML
+)
+printf '%s\n' "$LOCAL_DECODER" > /tmp/local_decoder.xml
+r=$(curl -s $CURL_TLS -X PUT "${API}/decoders/files/local_decoder.xml?overwrite=true" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -H "Content-Type: application/octet-stream" \
+      --data-binary @/tmp/local_decoder.xml)
+
+check "$r" "local_decoder.xml"
 
 # ---------------------------------------------------------------------------
 # Validar la configuración antes de reiniciar el manager

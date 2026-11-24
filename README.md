@@ -139,7 +139,7 @@ A full start takes several minutes: the dashboard waits until the indexer and th
 
 1. Creates the `databus`, `infobus` and `monitoring` groups.
 2. Uploads each group's `agent.conf`: which logs the agent reads and which paths integrity monitoring watches (see [Agent groups](#agent-groups)).
-3. Uploads `local_rules.xml` with the project rules (see [Project rules](#project-rules)).
+3. Uploads `local_rules.xml` with the project rules (see [Project rules](#project-rules)) and `local_decoder.xml` with the project decoders.
 4. Validates the configuration and restarts the manager only if it is valid.
 
 When it ends, the local agent starts and enrolls in the `monitoring` group.
@@ -320,6 +320,14 @@ They use the range reserved for local rules (100100 and up).
 | 100120 | 12 | Deployment configuration or secrets changed | A `.env` or `compose.prod.yml` changed |
 | 100121 | 10 | databus: published GTFS Schedule changed | The GTFS published by databus changed |
 | 100122 | 12 | Docker socket changed | The Docker socket changed |
+| 100130 | 0 | Traefik: request in the access log | Base: any Traefik request (`/home/traefik/logs/access.log`). Raises no alert |
+| 100131 | 5 | Traefik: access denied (…) | A 401 or 403 response |
+| 100132 | 10 | Traefik: brute force, 20 denied requests (401/403) in 60 s | 20 × 100131 from the same client IP within 60 s |
+| 100133 | 3 | Traefik: 404 for … | A 404 response |
+| 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 from the same client IP, each on a different path, within 60 s |
+| 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 requests from the same client IP within 30 s |
+
+Rules 100130–100135 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik-srcip` copies that IP into `srcip`, the field that active responses use to block a client.
 
 ### Active response
 

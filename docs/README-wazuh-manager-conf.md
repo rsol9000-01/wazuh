@@ -16,14 +16,14 @@ Prepares the Wazuh manager before the agents enroll. The `wazuh-init` container 
 | **Runs on** | The `wazuh-init` container on the server (R4), mounted as `/init.sh` |
 | **Run by** | `docker compose up` (started by [`wazuh-dev.sh`](README-wazuh-dev.md) in `server` mode) |
 | **Talks to** | Wazuh manager API at `WAZUH_API_URL` (port 55000) |
-| **Creates** | Groups `databus`, `infobus` and `monitoring`; their `agent.conf`; `local_rules.xml` |
+| **Creates** | Groups `databus`, `infobus` and `monitoring`; their `agent.conf`; `local_rules.xml`; `local_decoder.xml` |
 | **Tools** | `bash`, `curl`, `jq` (installed with `apk` if missing) |
 
 ```mermaid
 flowchart TD
   A["Wait until the API accepts the credentials<br/>(up to 180 s)"] --> B["Create missing groups<br/>databus · infobus · monitoring"]
   B --> C["Upload agent.conf of each group"]
-  C --> D["Upload local_rules.xml"]
+  C --> D["Upload local_rules.xml<br/>and local_decoder.xml"]
   D --> E{"Configuration valid?<br/>(up to 6 tries)"}
   E -- no --> X["Exit 1: manager NOT restarted"]
   E -- yes --> F["Renew the token and restart the manager"]
@@ -79,7 +79,7 @@ The paths are written into each group's `agent.conf`, so they must be the real p
 3. Waits until the API accepts the credentials: one try every 5 s, up to 36 tries (180 s).
 4. Creates the `databus`, `infobus` and `monitoring` groups if they do not exist.
 5. Uploads the `agent.conf` of each group (see [Agent groups](#agent-groups)).
-6. Uploads `local_rules.xml`, overwriting the previous one (see [Project rules](#project-rules)).
+6. Uploads `local_rules.xml` and `local_decoder.xml`, overwriting the previous ones (see [Project rules](#project-rules) and [Project decoders](#project-decoders)).
 7. Validates the manager configuration: up to 6 tries, 5 s apart. If it is not `OK`, prints the details and exits **without** restarting the manager.
 8. Logs in again, because the token lasts 900 s, and restarts the manager.
 9. Waits until the API answers again, lists the groups with their agent count and exits with `0`.
@@ -138,6 +138,22 @@ They use the range reserved for local rules (100100 and up), in the `simovilab` 
 | 100120 | 12 | FIM 550, 553, 554 | A `.env` or `compose.prod.yml` changed |
 | 100121 | 10 | FIM 550, 553, 554 | The GTFS published by databus changed |
 | 100122 | 12 | FIM 550, 554 | The Docker socket changed |
+| 100130 | 0 | JSON decoder, fields `entryPointName` and `ClientHost` | Base: any request in the Traefik access log. Raises no alert |
+| 100131 | 5 | 100130, `DownstreamStatus` 401 or 403 | Access denied |
+| 100132 | 10 | 20 × 100131 in 60 s, same `ClientHost` | Brute force against a protected route |
+| 100133 | 3 | 100130, `DownstreamStatus` 404 | Nonexistent route |
+| 100134 | 10 | 50 × 100133 in 60 s, same `ClientHost`, different `RequestPath` | Route scan |
+| 100135 | 10 | 3000 × 100130 in 30 s, same `ClientHost` | Flooding (100 requests per second) |
+
+### Project decoders
+
+`local_decoder.xml` has one decoder:
+
+| Decoder | Parent | What it adds |
+| --- | --- | --- |
+| `simovilab-traefik-srcip` | `json` | Copies `ClientHost` of the Traefik access log into `srcip`. The built-in `json` decoder already extracts every field; `srcip` is the field that `firewall-drop` uses to block the client |
+
+The agents read the Traefik access log at `/home/traefik/logs/access.log` (all three groups). The agent containers mount it from `TRAEFIK_LOGS_PATH` in `.env` (default `/home/traefik/logs`).
 
 ### Exit codes
 
