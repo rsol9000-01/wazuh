@@ -183,6 +183,7 @@ services:
   ###########################
   wazuh-init:
     image: alpine/curl:latest
+    container_name: wazuh-init
     restart: "no"
     env_file: .env
     networks:
