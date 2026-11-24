@@ -147,11 +147,12 @@ They use the range reserved for local rules (100100 and up), in the `simovilab` 
 
 ### Project decoders
 
-`local_decoder.xml` has one decoder:
+`local_decoder.xml` has two sibling decoders (same name and parent). In Wazuh 4.14 a child of `json` replaces the fields of its parent, so both are needed:
 
 | Decoder | Parent | What it adds |
 | --- | --- | --- |
-| `simovilab-traefik-srcip` | `json` | Copies `ClientHost` of the Traefik access log into `srcip`. The built-in `json` decoder already extracts every field; `srcip` is the field that `firewall-drop` uses to block the client |
+| `simovilab-traefik` (1) | `json` | Extracts every field of the Traefik JSON line again (`ClientHost`, `DownstreamStatus`, `RequestPath`…), used by rules 100130–100135 |
+| `simovilab-traefik` (2) | `json` | Copies `ClientHost` into `srcip`, the field that `firewall-drop` uses to block the client |
 
 The agents read the Traefik access log at `/home/traefik/logs/access.log` (all three groups). The agent containers mount it from `TRAEFIK_LOGS_PATH` in `.env` (default `/home/traefik/logs`).
 

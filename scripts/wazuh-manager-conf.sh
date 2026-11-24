@@ -415,7 +415,7 @@ LOCAL_RULES=$(cat <<'XML'
   </rule>
 
   <!-- R12: Traefik access log (JSON). Detection by ClientHost works with the built-in
-       json decoder; the local decoder simovilab-traefik-srcip also copies ClientHost
+       json fields; the local decoder simovilab-traefik also copies ClientHost
        into srcip so active responses can block the client. -->
   <rule id="100130" level="0">
     <decoded_as>json</decoded_as>
@@ -480,12 +480,19 @@ check "$r" "local_rules.xml"
 log "Uploading local_decoder.xml ..."
 LOCAL_DECODER=$(cat <<'XML'
 <!-- simovilab: local decoders.
-     Traefik access log (JSON, one line per request). The built-in json decoder already
-     extracts every field (ClientHost, DownstreamStatus, RequestPath...). This child decoder
-     only copies ClientHost into srcip, the field that firewall-drop uses to block the client. -->
-<decoder name="simovilab-traefik-srcip">
+     Traefik access log (JSON, one line per request). Two sibling decoders (same name and
+     parent): a child of json replaces the fields of its parent, so the first sibling extracts
+     every field of the JSON again (ClientHost, DownstreamStatus, RequestPath...) and the second
+     copies ClientHost into srcip, the field that firewall-drop uses to block the client.
+     Checked with wazuh-logtest 4.14.5. -->
+<decoder name="simovilab-traefik">
   <parent>json</parent>
   <prematch>"entryPointName":</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
+
+<decoder name="simovilab-traefik">
+  <parent>json</parent>
   <regex type="pcre2">"ClientHost":"([^"]+)"</regex>
   <order>srcip</order>
 </decoder>

@@ -327,7 +327,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
 | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 desde la misma IP de cliente, cada una en una ruta distinta, en 60 s |
 | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 peticiones desde la misma IP de cliente en 30 s |
 
-Las reglas 100130–100135 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik-srcip` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
+Las reglas 100130–100135 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
 
 ### Respuesta activa
 
