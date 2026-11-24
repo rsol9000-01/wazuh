@@ -41,7 +41,7 @@ text.cap{fill:#5b6b7c}
 <text class="m" x="756" y="344" font-size="13.5" font-weight="700" fill="#8a2b55">wazuh.manager</text>
 <text class="m cap" x="756" y="363" font-size="11">Wazuh Manager 4.14.5 + Filebeat</text>
 <line x1="756" y1="374" x2="1124" y2="374" stroke="#dde4ec"/>
-<text class="m" x="756" y="392" font-size="11">aplica reglas 100100–100135 y respuesta activa</text>
+<text class="m" x="756" y="392" font-size="11">aplica reglas 100100–100136 y respuesta activa</text>
 <text class="m" x="756" y="410" font-size="11">1514 · 1515 · 514/udp · API 55000</text>
 <text class="m cap" x="756" y="434" font-size="9.5">MONTAJES</text>
 <rect x="756" y="442" width="10" height="10" rx="5" fill="#d7eaf4" stroke="#0b6e99" stroke-width="1.3"/>

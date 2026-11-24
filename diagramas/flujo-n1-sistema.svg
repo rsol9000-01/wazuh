@@ -133,7 +133,7 @@ text.cap{fill:#5b6b7c}
     <text class="m" x="948" y="368" font-size="11" fill="#8a2b55">WAZUH 4.14.5 · wazuh-fase-4</text>
     <rect x="736" y="380" width="414" height="46" rx="6" fill="#f6e0ea" stroke="#a8406f" stroke-width="1.8"/>
     <text class="m" x="943" y="399" font-size="12" font-weight="600" text-anchor="middle" fill="#8a2b55">wazuh.manager</text>
-    <text class="m cap" x="943" y="416" font-size="10.5" text-anchor="middle">1514 · 1515 · 514/udp · API 55000 · reglas 100100–100135</text>
+    <text class="m cap" x="943" y="416" font-size="10.5" text-anchor="middle">1514 · 1515 · 514/udp · API 55000 · reglas 100100–100136</text>
     <rect x="736" y="438" width="200" height="46" rx="6" fill="#d7eaf4" stroke="#0b6e99" stroke-width="1.4"/>
     <text class="m" x="836" y="457" font-size="12" font-weight="600" text-anchor="middle">wazuh.indexer</text>
     <text class="m cap" x="836" y="474" font-size="10.5" text-anchor="middle">OpenSearch :9200</text>

@@ -461,6 +461,18 @@ LOCAL_RULES=$(cat <<'XML'
     <group>web,dos,</group>
   </rule>
 
+  <!-- La misma ruta inexistente pedida una y otra vez, desde cualquier cliente:
+       apunta a un cliente con una URL vieja o rota (una pantalla, una app, una
+       sonda), no a un ataque. Solo alerta, sin respuesta activa. ignore=600
+       deja una alerta cada 10 min mientras dure el problema. -->
+  <rule id="100136" level="7" frequency="100" timeframe="60" ignore="600">
+    <if_matched_sid>100133</if_matched_sid>
+    <same_field>RequestHost</same_field>
+    <same_field>RequestPath</same_field>
+    <description>Traefik: ruta inexistente pedida 100 veces en 60 s: $(RequestHost)$(RequestPath). Revisar por que la piden los clientes</description>
+    <group>web,availability,</group>
+  </rule>
+
 </group>
 XML
 )

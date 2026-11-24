@@ -144,6 +144,7 @@ They use the range reserved for local rules (100100 and up), in the `simovilab` 
 | 100133 | 3 | 100130, `DownstreamStatus` 404 | Nonexistent route |
 | 100134 | 10 | 50 × 100133 in 60 s, same `ClientHost`, different `RequestPath` | Route scan |
 | 100135 | 10 | 3000 × 100130 in 30 s, same `ClientHost` | Flooding (100 requests per second) |
+| 100136 | 7 | 100 × 100133 in 60 s, same `RequestHost` and `RequestPath`, any client; `ignore` 600 s | Missing route requested over and over: a client with a stale URL. Alert only |
 
 ### Project decoders
 
