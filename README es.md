@@ -292,9 +292,9 @@ sudo ./scripts/wazuh-dev.sh agent
 
 | Grupo | Host | Registros que lee | Integridad de archivos (FIM, en tiempo real) |
 | --- | --- | --- | --- |
-| `databus` | srv-databus | Registros JSON de todos los contenedores | `DATABUS_PATH` y el volumen `databus_feed_files` (GTFS publicado). Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
-| `infobus` | srv-infobus | Registros JSON de todos los contenedores | `INFOBUS_PATH`. Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
-| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, con IP de origen) y registros JSON de todos los contenedores | `WAZUH_PATH` y `ZABBIX_PATH`. Sin diferencias de los `.env` ni de `authd.pass`; ignora `.git` y los certificados |
+| `databus` | srv-databus | `/var/log/auth.log` (SSH, con IP de origen), access log de Traefik y registros JSON de todos los contenedores | `DATABUS_PATH` y el volumen `databus_feed_files` (GTFS publicado). Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
+| `infobus` | srv-infobus | `/var/log/auth.log` (SSH, con IP de origen), access log de Traefik y registros JSON de todos los contenedores | `INFOBUS_PATH`. Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
+| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, con IP de origen), access log de Traefik y registros JSON de todos los contenedores | `WAZUH_PATH` y `ZABBIX_PATH`. Sin diferencias de los `.env` ni de `authd.pass`; ignora `.git` y los certificados |
 
 "Sin diferencias" quiere decir que Wazuh avisa que el archivo cambió, pero no muestra el contenido, para no exponer credenciales en las alertas.
 
@@ -338,6 +338,25 @@ Las reglas 100130–100136 leen el access log de Traefik, que registra la IP del
 | `firewall-drop` | 100132 y 100134 (fuerza bruta y escaneo de rutas en Traefik) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 
 Todos los agentes (srv-databus, srv-infobus y srv-gestion) comparten la red del host y tienen la capacidad `NET_ADMIN`, así que `firewall-drop` escribe en el firewall del host y el bloqueo es real. El manager nunca bloquea 127.0.0.1, los tres servidores del proyecto (`10.20.203.23`, `.24` y `.25`: sondeos de Zabbix y Wazuh, y srv-infobus leyendo el GTFS de srv-databus) ni las redes internas de Docker (`172.16.0.0/12`). La regla 100135 (inundación) solo alerta: varias pantallas detrás de un mismo NAT pueden pasar el umbral sin ser un ataque.
+
+#### Lista de IPs que nunca se bloquean
+
+Las IPs de los tres servidores cambian en cada instalación (laboratorio, producción). Wazuh solo acepta esta lista dentro de `ossec.conf`, en el bloque `<global>`, así que no puede venir del `.env`: hay que editarla en el archivo.
+
+| Qué | Dónde |
+| --- | --- |
+| Archivo | `config/wazuh_cluster/wazuh_manager.conf`, en srv-gestion |
+| Líneas | Entre `===== EDITAR EN CADA INSTALACION` y `===== FIN DE LO QUE SE EDITA`. Para verlas: `grep -n white_list config/wazuh_cluster/wazuh_manager.conf` |
+| Formato | Una línea `<white_list>IP</white_list>` por servidor. Acepta redes en notación CIDR, por ejemplo `10.20.203.0/24` |
+| No tocar | `127.0.0.1`, `::1`, `localhost` y `172.16.0.0/12` (redes de Docker) |
+
+Después de editar, aplicar el cambio con el procedimiento de [Cambiar `wazuh_manager.conf` en una instalación existente](#cambiar-wazuh_managerconf-en-una-instalación-existente) y comprobar:
+
+```bash
+docker exec wazuh.manager grep -n white_list /var/ossec/etc/ossec.conf
+```
+
+Si falta la IP de un servidor, una ráfaga de errores entre servidores (por ejemplo, srv-infobus pidiendo un GTFS que ya no existe en srv-databus) puede hacer que uno bloquee al otro durante 1 h.
 
 ### Volúmenes
 

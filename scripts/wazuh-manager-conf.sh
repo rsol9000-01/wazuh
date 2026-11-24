@@ -169,6 +169,13 @@ log "Uploading agent.conf for the databus group ..."
 AGENT_CONF_DATABUS=$(cat <<XML
 <agent_config>
 
+  <!-- SSH (sshd) with source IP: rules 5712, 5720 and 5763 and their
+       active response also protect this host. -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
@@ -206,6 +213,13 @@ log "Uploading agent.conf for the infobus group ..."
 AGENT_CONF_INFOBUS=$(cat <<XML
 <agent_config>
 
+  <!-- SSH (sshd) with source IP: rules 5712, 5720 and 5763 and their
+       active response also protect this host. -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
@@ -239,15 +253,15 @@ check "$r" "agent.conf for infobus"
 # ---------------------------------------------------------------------------
 # Configure log collection and integrity monitoring for the monitoring group
 # ---------------------------------------------------------------------------
-# Use auth.log as a source with source IP addresses to validate active responses
-# on the host running the monitoring service.
+# auth.log (SSH with source IP) feeds the active response on this host, the
+# same as in the databus and infobus groups.
 # ---------------------------------------------------------------------------
 log "Uploading agent.conf for the monitoring group ..."
 AGENT_CONF_MONITORING=$(cat <<XML
 <agent_config>
 
-  <!-- The only project source that includes srcip; active responses can be
-       demonstrated using this source. -->
+  <!-- SSH (sshd) with source IP: rules 5712, 5720 and 5763 and their
+       active response protect this host. -->
   <localfile>
     <log_format>syslog</log_format>
     <location>/var/log/auth.log</location>

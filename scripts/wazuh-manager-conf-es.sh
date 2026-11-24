@@ -169,6 +169,13 @@ log "Subiendo agent.conf del grupo databus ..."
 AGENT_CONF_DATABUS=$(cat <<XML
 <agent_config>
 
+  <!-- SSH (sshd) con IP de origen: las reglas 5712, 5720 y 5763 y su
+       respuesta activa tambien protegen este host. -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
@@ -206,6 +213,13 @@ log "Subiendo agent.conf del grupo infobus ..."
 AGENT_CONF_INFOBUS=$(cat <<XML
 <agent_config>
 
+  <!-- SSH (sshd) con IP de origen: las reglas 5712, 5720 y 5763 y su
+       respuesta activa tambien protegen este host. -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
   <localfile>
     <log_format>json</log_format>
     <location>/var/lib/docker/containers/*/*-json.log</location>
@@ -239,15 +253,15 @@ check "$r" "agent.conf de infobus"
 # ---------------------------------------------------------------------------
 # Configurar la recopilación de logs y la integridad del grupo monitoring
 # ---------------------------------------------------------------------------
-# Usar auth.log como fuente con dirección IP de origen para validar respuestas
-# activas en el host que ejecuta el monitoreo.
+# auth.log (SSH con IP de origen) alimenta la respuesta activa en este host,
+# igual que en los grupos databus e infobus.
 # ---------------------------------------------------------------------------
 log "Subiendo agent.conf del grupo monitoring ..."
 AGENT_CONF_MONITORING=$(cat <<XML
 <agent_config>
 
-  <!-- Unica fuente del proyecto que trae srcip: es donde la respuesta
-       activa se puede demostrar. -->
+  <!-- SSH (sshd) con IP de origen: las reglas 5712, 5720 y 5763 y su
+       respuesta activa protegen este host. -->
   <localfile>
     <log_format>syslog</log_format>
     <location>/var/log/auth.log</location>

@@ -110,9 +110,9 @@ docker exec wazuh.manager /var/ossec/bin/agent_groups -l
 
 | Group | Host | Logs it reads | File integrity (FIM, real time) |
 | --- | --- | --- | --- |
-| `databus` | srv-databus | JSON logs of every container | `DATABUS_PATH` and the `databus_feed_files` volume. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
-| `infobus` | srv-infobus | JSON logs of every container | `INFOBUS_PATH`. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
-| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, with source IP) and JSON logs of every container | `WAZUH_PATH` and `ZABBIX_PATH`. No diffs for both `.env` and `authd.pass`; ignores `.git` and the certificates |
+| `databus` | srv-databus | `/var/log/auth.log` (SSH, with source IP), Traefik access log and JSON logs of every container | `DATABUS_PATH` and the `databus_feed_files` volume. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
+| `infobus` | srv-infobus | `/var/log/auth.log` (SSH, with source IP), Traefik access log and JSON logs of every container | `INFOBUS_PATH`. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
+| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, with source IP), Traefik access log and JSON logs of every container | `WAZUH_PATH` and `ZABBIX_PATH`. No diffs for both `.env` and `authd.pass`; ignores `.git` and the certificates |
 
 "No diffs" means Wazuh reports that the file changed but does not show its content, so credentials never appear in alerts.
 
