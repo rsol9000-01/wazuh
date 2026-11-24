@@ -1,7 +1,3 @@
-networks:
-  app_internal:                      
-    external: true
-    name: ${AGENT_DOCKER_NETWORK}
 services:
   wazuh.agent:
     #image: wazuh/wazuh-agent:4.14.5
@@ -12,9 +8,16 @@ services:
     pull_policy: build
     restart: always
     container_name: wazuh.agent
-    hostname: $LOCAL_AGENT_HOSTNAME
-    networks:
-      - app_internal
+    # Respuesta activa con efecto real en srv-databus y srv-infobus (igual que el agente de srv-gestion):
+    # firewall-drop escribe en el netfilter del namespace de red del
+    # contenedor; para que sea el del host, el agente comparte la red del
+    # host y recibe solo NET_ADMIN (no privileged). En este modo no aplica
+    # "hostname:"; el nombre del agente va en WAZUH_AGENT_NAME.
+    # El agente no necesita la red de la aplicación: lee logs y archivos
+    # montados y consulta Docker por el socket.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
     #privileged: true
     deploy:
       resources:
@@ -30,7 +33,7 @@ services:
     environment:
       - WAZUH_MANAGER_SERVER=${REMOTE_AGENT_MANAGER_SERVER}
       - WAZUH_AGENT_GROUP=${REMOTE_AGENT_GROUP}
-      #- WAZUH_AGENT_NAME=localhost
+      - WAZUH_AGENT_NAME=${LOCAL_AGENT_HOSTNAME}
       - WAZUH_MANAGER_SERVER_PORT=1514
       - PROJECT_PATH=${PROJECT_PATH}
       - TZ=${TZ}

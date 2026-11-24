@@ -580,23 +580,6 @@ if [ "$FLAG_SERVER" = "true" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# En modo agente, la red de la aplicación debe existir previamente
-# ---------------------------------------------------------------------------
-if [ "$FLAG_SERVER" = "false" ]; then
-  AGENT_DOCKER_NETWORK="$(grep '^AGENT_DOCKER_NETWORK[[:space:]]*=' .env | sed 's/^[^=]*=[[:space:]]*//' || true)"
-  if [ -z "$AGENT_DOCKER_NETWORK" ]; then
-    echo "❌  Error: AGENT_DOCKER_NETWORK no está definida en .env"
-    exit 1
-  fi
-  if ! docker network inspect "$AGENT_DOCKER_NETWORK" >/dev/null 2>&1; then
-    echo "❌  Error: la red Docker '$AGENT_DOCKER_NETWORK' no existe."
-    echo "    Inicie primero la infraestructura de la aplicación o corrija AGENT_DOCKER_NETWORK en .env."
-    exit 1
-  fi
-  echo "✅  Red '$AGENT_DOCKER_NETWORK' encontrada"
-fi
-
-# ---------------------------------------------------------------------------
 # Ejecutar la acción solicitada mediante Docker Compose
 # ---------------------------------------------------------------------------
 

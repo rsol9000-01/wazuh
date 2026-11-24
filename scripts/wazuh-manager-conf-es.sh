@@ -549,5 +549,5 @@ log "Grupos existentes:"
 api GET "/groups" | jq -r '.data.affected_items[] | "  - \(.name) (agentes: \(.count))"'
 
 log "Listo. El manager acepta registros; los agentes pueden enrolarse con:"
-log "  R3 -> grupo 'databus'   R2 -> grupo 'infobus'   R4 -> grupo 'monitoring'"
+log "  srv-databus -> grupo 'databus'   srv-infobus -> grupo 'infobus'   srv-gestion -> grupo 'monitoring'"
 exit 0

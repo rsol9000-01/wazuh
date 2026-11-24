@@ -13,7 +13,7 @@ Entrypoint of the Wazuh agent container. On every start it installs the base con
 | Item | Value |
 | --- | --- |
 | **Location** | `scripts/wazuh-agent-conf.sh` (selected with `CONFIG_AGENT_SCRIPT` in `.env`) |
-| **Runs on** | The `wazuh.agent` container: local agent on R4 and remote agents on R2 and R3 |
+| **Runs on** | The `wazuh.agent` container: local agent on srv-gestion and remote agents on srv-databus and srv-infobus |
 | **Run by** | Docker, as the container entrypoint (`/init_01.sh`) |
 | **Reads** | `/opt/ossec.conf.tpl` ([`agent/conf/ossec.conf`](../agent/conf/ossec.conf)), `/opt/authd.pass`, `/var/ossec/etc/client.keys` |
 | **Writes** | `/var/ossec/etc/ossec.conf`, `/var/ossec/etc/authd.pass` |
@@ -40,8 +40,8 @@ The script is not run by hand. It starts with the agent:
 
 ```bash
 cd /home/wazuh
-sudo ./scripts/wazuh-dev.sh agent     # remote agent (R2 or R3)
-sudo ./scripts/wazuh-dev.sh server    # the local agent starts with the server stack (R4)
+sudo ./scripts/wazuh-dev.sh agent     # remote agent (srv-databus or srv-infobus)
+sudo ./scripts/wazuh-dev.sh server    # the local agent starts with the server stack (srv-gestion)
 ```
 
 ### How to
@@ -56,10 +56,10 @@ sudo ./scripts/wazuh-dev.sh server    # the local agent starts with the server s
 
 | Agent | Compose file | Manager address | Group | Name |
 | --- | --- | --- | --- | --- |
-| Local (R4) | [`docker-compose.yml`](../docker-compose.yml) | `WAZUH_MANAGER_SERVER=127.0.0.1` | `LOCAL_AGENT_GROUP` (`monitoring`) | `WAZUH_AGENT_NAME` = `LOCAL_AGENT_HOSTNAME` |
-| Remote (R2, R3) | [`agent/docker-compose-agent.yml`](../agent/docker-compose-agent.yml) | First argument: `REMOTE_AGENT_MANAGER_SERVER` | `REMOTE_AGENT_GROUP` (`databus` or `infobus`) | Container `hostname` = `LOCAL_AGENT_HOSTNAME` |
+| Local (srv-gestion) | [`docker-compose.yml`](../docker-compose.yml) | `WAZUH_MANAGER_SERVER=127.0.0.1` | `LOCAL_AGENT_GROUP` (`monitoring`) | `WAZUH_AGENT_NAME` = `LOCAL_AGENT_HOSTNAME` |
+| Remote (srv-databus, srv-infobus) | [`agent/docker-compose-agent.yml`](../agent/docker-compose-agent.yml) | First argument: `REMOTE_AGENT_MANAGER_SERVER` | `REMOTE_AGENT_GROUP` (`databus` or `infobus`) | `WAZUH_AGENT_NAME` = `LOCAL_AGENT_HOSTNAME` |
 
-The local agent uses `network_mode: host`, where Compose cannot set the container host name. That is why its name goes into `<enrollment>` through `WAZUH_AGENT_NAME`.
+Both agents use `network_mode: host` with `NET_ADMIN`, so `firewall-drop` blocks on the host firewall. In that mode Compose cannot set the container host name. That is why the name goes into `<enrollment>` through `WAZUH_AGENT_NAME`. An agent that is already enrolled keeps its name and ID, because `client.keys` stays in the `wazuh_agent_etc` volume.
 
 #### 3. What the script does
 

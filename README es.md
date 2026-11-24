@@ -22,21 +22,21 @@ Despliegue con Docker Compose de Wazuh (single-node) para vigilar la seguridad d
 | **wazuh.dashboard** | Servidor | Interfaz web | Wazuh Dashboard 4.14.5 |
 | **wazuh-init** | Servidor | Crea grupos, configuración por grupo y reglas por API. Corre una vez y termina | alpine/curl + bash + jq |
 | **wazuh.agent** | Servidor | Agente local en el grupo `monitoring`, con red del host para que la respuesta activa bloquee en el firewall real | Wazuh Agent 4.14.5 |
-| **wazuh.agent** | Cada servidor de aplicación | Agente en el grupo `databus` o `infobus` | Wazuh Agent 4.14.5 |
+| **wazuh.agent** | Cada servidor de aplicación | Agente en el grupo `databus` o `infobus`, con red del host por la misma razón | Wazuh Agent 4.14.5 |
 
 ```mermaid
 flowchart LR
-  subgraph R4["R4 · servidor de monitoreo"]
+  subgraph GESTION["srv-gestion · servidor de monitoreo"]
     IDX[("wazuh.indexer<br/>:9200")]
     MGR["wazuh.manager<br/>1514 eventos · 1515 enrolamiento<br/>514/udp syslog · 55000 API"]
     DSH["wazuh.dashboard<br/>:6443"]
     INIT["wazuh-init<br/>(una sola vez)"]
     AG4["wazuh.agent<br/>grupo monitoring"]
   end
-  subgraph R3["R3 · databus"]
+  subgraph DATABUS["srv-databus"]
     AG3["wazuh.agent<br/>grupo databus"]
   end
-  subgraph R2["R2 · infobus"]
+  subgraph INFOBUS["srv-infobus"]
     AG2["wazuh.agent<br/>grupo infobus"]
   end
   AG3 -- "1515 enrolamiento · 1514 eventos" --> MGR
@@ -50,12 +50,12 @@ flowchart LR
 
 ## Servidor
 
-El servidor va en la máquina de monitoreo (R4), junto al servidor de Zabbix. Se levanta con [`docker-compose.yml`](docker-compose.yml).
+El servidor va en la máquina de monitoreo (srv-gestion), junto al servidor de Zabbix. Se levanta con [`docker-compose.yml`](docker-compose.yml).
 
 ### Quick start
 
 ```bash
-git clone -b wazuh-fase-3 https://github.com/rsol9000-01/wazuh.git /home/wazuh
+git clone -b wazuh-fase-4 https://github.com/rsol9000-01/wazuh.git /home/wazuh
 cd /home/wazuh
 cp .env.example .env     # reemplazar todos los "CAMBIAR" (ver abajo)
 sudo ./scripts/wazuh-dev.sh server
@@ -197,12 +197,12 @@ docker compose down        # detiene el stack; los volúmenes se conservan
 
 ## Agente
 
-El agente va en cada servidor de aplicación: R3 con databus y R2 con infobus. Se levanta con [`agent/docker-compose-agent.yml`](agent/docker-compose-agent.yml).
+El agente va en cada servidor de aplicación: srv-databus y srv-infobus. Se levanta con [`agent/docker-compose-agent.yml`](agent/docker-compose-agent.yml).
 
 ### Quick start
 
 ```bash
-git clone -b wazuh-fase-3 https://github.com/rsol9000-01/wazuh.git /home/wazuh
+git clone -b wazuh-fase-4 https://github.com/rsol9000-01/wazuh.git /home/wazuh
 cd /home/wazuh
 cp .env.example .env     # completar las 4 primeras variables (ver abajo)
 sudo ./scripts/wazuh-dev.sh agent
@@ -223,7 +223,7 @@ En uno o dos minutos el agente aparece en la interfaz, en **Agents**, dentro de 
 
 En modo agente solo hay que completar las primeras variables. El resto se deja como viene en `.env.example`.
 
-| Variable | databus (R3) | infobus (R2) | Qué es |
+| Variable | srv-databus | srv-infobus | Qué es |
 | --- | --- | --- | --- |
 | `REMOTE_AGENT_MANAGER_SERVER` | `wazuh.example.com` | `wazuh.example.com` | Nombre o IP del servidor Wazuh |
 | `AGENT_AUTH_PASSWORD` | *(la del servidor)* | *(la del servidor)* | Contraseña de enrolamiento. Tiene que ser **la misma** del `.env` del servidor |
@@ -245,8 +245,8 @@ El script verifica Docker, prepara `rsyslog`, guarda `AGENT_AUTH_PASSWORD` en `c
 
 ```mermaid
 sequenceDiagram
-  participant A as Agente (R2 o R3)
-  participant M as Manager (R4)
+  participant A as Agente (srv-databus o srv-infobus)
+  participant M as Manager (srv-gestion)
   A->>M: Enrolamiento por 1515/tcp con la contraseña y el grupo
   M->>A: Entrega la llave del agente (client.keys)
   M->>A: Envía el agent.conf de su grupo
@@ -292,9 +292,9 @@ sudo ./scripts/wazuh-dev.sh agent
 
 | Grupo | Host | Registros que lee | Integridad de archivos (FIM, en tiempo real) |
 | --- | --- | --- | --- |
-| `databus` | R3 | Registros JSON de todos los contenedores | `DATABUS_PATH` y el volumen `databus_feed_files` (GTFS publicado). Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
-| `infobus` | R2 | Registros JSON de todos los contenedores | `INFOBUS_PATH`. Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
-| `monitoring` | R4 | `/var/log/auth.log` (SSH, con IP de origen) y registros JSON de todos los contenedores | `WAZUH_PATH` y `ZABBIX_PATH`. Sin diferencias de los `.env` ni de `authd.pass`; ignora `.git` y los certificados |
+| `databus` | srv-databus | Registros JSON de todos los contenedores | `DATABUS_PATH` y el volumen `databus_feed_files` (GTFS publicado). Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
+| `infobus` | srv-infobus | Registros JSON de todos los contenedores | `INFOBUS_PATH`. Sin diferencias de `.env` y `.env.prod`; ignora `.git`, `*.log`, `*.tmp` y `__pycache__` |
+| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, con IP de origen) y registros JSON de todos los contenedores | `WAZUH_PATH` y `ZABBIX_PATH`. Sin diferencias de los `.env` ni de `authd.pass`; ignora `.git` y los certificados |
 
 "Sin diferencias" quiere decir que Wazuh avisa que el archivo cambió, pero no muestra el contenido, para no exponer credenciales en las alertas.
 
@@ -334,8 +334,9 @@ Las reglas 100130–100135 leen el access log de Traefik, que registra la IP del
 | Comando | Reglas | Dónde se ejecuta | Duración |
 | --- | --- | --- | --- |
 | `firewall-drop` | 5712, 5720 y 5763 (fuerza bruta e intentos fallidos por SSH) | En el agente que generó la alerta (`local`) | 180 s |
+| `firewall-drop` | 100132 y 100134 (fuerza bruta y escaneo de rutas en Traefik) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 
-El bloqueo es real solo en el agente local de R4: comparte la red del host y tiene la capacidad `NET_ADMIN`. En los agentes de R2 y R3 el bloqueo queda dentro del contenedor y no protege al host.
+Todos los agentes (srv-databus, srv-infobus y srv-gestion) comparten la red del host y tienen la capacidad `NET_ADMIN`, así que `firewall-drop` escribe en el firewall del host y el bloqueo es real. El manager nunca bloquea 127.0.0.1, srv-gestion (`10.20.203.5`, sondeos de Zabbix y Wazuh) ni las redes internas de Docker (`172.16.0.0/12`). La regla 100135 (inundación) solo alerta: varias pantallas detrás de un mismo NAT pueden pasar el umbral sin ser un ataque.
 
 ### Volúmenes
 

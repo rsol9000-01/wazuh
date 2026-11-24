@@ -214,7 +214,7 @@ services:
     pull_policy: build
     restart: always
     container_name: wazuh.agent
-    # Respuesta activa con efecto real en R4: firewall-drop escribe en el
+    # Respuesta activa con efecto real en srv-gestion: firewall-drop escribe en el
     # netfilter del namespace de red del contenedor; para que sea el del
     # host, el agente comparte la red del host y recibe solo NET_ADMIN
     # (no privileged). En este modo no aplica "hostname:" y el DNS interno

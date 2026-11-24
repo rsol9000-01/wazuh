@@ -16,7 +16,7 @@ Deployment script for the Wazuh stack. It prepares the host (kernel setting, `rs
 | Item | Value |
 | --- | --- |
 | **Location** | `scripts/wazuh-dev.sh` |
-| **Runs on** | The host: R4 in `server` mode, R2 or R3 in `agent` mode |
+| **Runs on** | The host: srv-gestion in `server` mode, srv-databus or srv-infobus in `agent` mode |
 | **Run by** | An administrator, as root (`sudo`) |
 | **Reads** | `.env`, `config/wazuh_indexer/internal_users.yml.template`, `config/wazuh_dashboard/wazuh.yml.template` |
 | **Writes** | `config/wazuh_cluster/authd.pass`, `.env` (`DOCKER_GID`); in `server` mode also `internal_users.yml`, `wazuh.yml`, `config/wazuh_indexer_ssl_certs/` and `/etc/sysctl.conf` |
@@ -49,8 +49,8 @@ flowchart TD
 ```bash
 cd /home/wazuh
 cp .env.example .env                   # replace every "CAMBIAR"
-sudo ./scripts/wazuh-dev.sh server     # on R4
-sudo ./scripts/wazuh-dev.sh agent      # on R2 and R3
+sudo ./scripts/wazuh-dev.sh server     # on srv-gestion
+sudo ./scripts/wazuh-dev.sh agent      # on srv-databus and srv-infobus
 ```
 
 ### How to

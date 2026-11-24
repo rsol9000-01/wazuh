@@ -13,7 +13,7 @@ Prepares the Wazuh manager before the agents enroll. The `wazuh-init` container 
 | Item | Value |
 | --- | --- |
 | **Location** | `scripts/wazuh-manager-conf.sh` (selected with `CONFIG_SERVER_SCRIPT` in `.env`) |
-| **Runs on** | The `wazuh-init` container on the server (R4), mounted as `/init.sh` |
+| **Runs on** | The `wazuh-init` container on the server (srv-gestion), mounted as `/init.sh` |
 | **Run by** | `docker compose up` (started by [`wazuh-dev.sh`](README-wazuh-dev.md) in `server` mode) |
 | **Talks to** | Wazuh manager API at `WAZUH_API_URL` (port 55000) |
 | **Creates** | Groups `databus`, `infobus` and `monitoring`; their `agent.conf`; `local_rules.xml`; `local_decoder.xml` |
@@ -65,10 +65,10 @@ docker compose logs -f wazuh-init
 | `WAZUH_API_USER` | `wazuh-wui` | `API_USERNAME` | API user |
 | `WAZUH_API_PASSWORD` | *(required)* | `API_PASSWORD` | API password |
 | `WAZUH_API_INSECURE` | `0` | `.env` (`env_file`) | Must be `1`: accept the self-signed certificate |
-| `DATABUS_PATH` | `/home/databus` | `DATABUS_PATH` | databus path **on the R3 host** |
-| `INFOBUS_PATH` | `/home/infobus` | `INFOBUS_PATH` | infobus path **on the R2 host** |
-| `WAZUH_PATH` | `/home/wazuh` | `WAZUH_PATH` | Path of this repository on R4 |
-| `ZABBIX_PATH` | `/home/zabbix` | `ZABBIX_PATH` | Path of the Zabbix repository on R4 |
+| `DATABUS_PATH` | `/home/databus` | `DATABUS_PATH` | databus path **on srv-databus** |
+| `INFOBUS_PATH` | `/home/infobus` | `INFOBUS_PATH` | infobus path **on srv-infobus** |
+| `WAZUH_PATH` | `/home/wazuh` | `WAZUH_PATH` | Path of this repository on srv-gestion |
+| `ZABBIX_PATH` | `/home/zabbix` | `ZABBIX_PATH` | Path of the Zabbix repository on srv-gestion |
 
 The paths are written into each group's `agent.conf`, so they must be the real paths on each agent host.
 
@@ -110,9 +110,9 @@ docker exec wazuh.manager /var/ossec/bin/agent_groups -l
 
 | Group | Host | Logs it reads | File integrity (FIM, real time) |
 | --- | --- | --- | --- |
-| `databus` | R3 | JSON logs of every container | `DATABUS_PATH` and the `databus_feed_files` volume. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
-| `infobus` | R2 | JSON logs of every container | `INFOBUS_PATH`. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
-| `monitoring` | R4 | `/var/log/auth.log` (SSH, with source IP) and JSON logs of every container | `WAZUH_PATH` and `ZABBIX_PATH`. No diffs for both `.env` and `authd.pass`; ignores `.git` and the certificates |
+| `databus` | srv-databus | JSON logs of every container | `DATABUS_PATH` and the `databus_feed_files` volume. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
+| `infobus` | srv-infobus | JSON logs of every container | `INFOBUS_PATH`. No diffs for `.env` and `.env.prod`; ignores `.git`, `*.log`, `*.tmp` and `__pycache__` |
+| `monitoring` | srv-gestion | `/var/log/auth.log` (SSH, with source IP) and JSON logs of every container | `WAZUH_PATH` and `ZABBIX_PATH`. No diffs for both `.env` and `authd.pass`; ignores `.git` and the certificates |
 
 "No diffs" means Wazuh reports that the file changed but does not show its content, so credentials never appear in alerts.
 
