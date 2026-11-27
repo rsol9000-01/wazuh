@@ -145,6 +145,8 @@ They use the range reserved for local rules (100100 and up), in the `simovilab` 
 | 100134 | 10 | 50 × 100133 in 60 s, same `ClientHost`, different `RequestPath` | Route scan |
 | 100135 | 10 | 3000 × 100130 in 30 s, same `ClientHost` | Flooding (100 requests per second) |
 | 100136 | 7 | 50 × 100133 in 60 s, same `RequestHost` and `RequestPath`, any client; `ignore` 60 s | Missing route requested over and over: a client with a stale URL. Alert only |
+| 100137 | 5 | 100130, `POST` to `/admin/login/` with `DownstreamStatus` 200 | Failed Django admin login (Django answers 200 and shows the form again) |
+| 100138 | 10 | 10 × 100137 in 120 s, same `ClientHost` | Brute force against the Django admin |
 
 ### Project decoders
 

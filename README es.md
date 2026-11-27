@@ -327,15 +327,17 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
 | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 desde la misma IP de cliente, cada una en una ruta distinta, en 60 s |
 | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 peticiones desde la misma IP de cliente en 30 s |
 | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 en el mismo host y ruta, desde cualquier cliente, en 60 s. Solo alerta: un cliente con una URL vieja, no un ataque. Como máximo una alerta por minuto |
+| 100137 | 5 | Traefik: failed Django admin login | Un `POST` a `/admin/login/` que responde 200. Ante un ingreso fallido Django vuelve a mostrar el formulario (uno correcto responde 302) y no registra el fallo |
+| 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 desde la misma IP de cliente en 120 s |
 
-Las reglas 100130–100136 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
+Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
 
 ### Respuesta activa
 
 | Comando | Reglas | Dónde se ejecuta | Duración |
 | --- | --- | --- | --- |
 | `firewall-drop` | 5712, 5720 y 5763 (fuerza bruta e intentos fallidos por SSH) | En el agente que generó la alerta (`local`) | 180 s |
-| `firewall-drop` | 100132 y 100134 (fuerza bruta y escaneo de rutas en Traefik) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
+| `firewall-drop` | 100132, 100134 y 100138 (fuerza bruta y escaneo de rutas en Traefik, y fuerza bruta al admin de Django) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 
 Todos los agentes (srv-databus, srv-infobus y srv-gestion) comparten la red del host y tienen la capacidad `NET_ADMIN`, así que `firewall-drop` escribe en el firewall del host y el bloqueo es real. El manager nunca bloquea 127.0.0.1, los tres servidores del proyecto (`10.20.203.23`, `.24` y `.25`: sondeos de Zabbix y Wazuh, y srv-infobus leyendo el GTFS de srv-databus) ni las redes internas de Docker (`172.16.0.0/12`). La regla 100135 (inundación) solo alerta: varias pantallas detrás de un mismo NAT pueden pasar el umbral sin ser un ataque.
 
@@ -360,7 +362,7 @@ Si falta la IP de un servidor, una ráfaga de errores entre servidores (por ejem
 
 #### Requisito: la IP del cliente tiene que llegar a Traefik
 
-Las reglas 100132 y 100134 bloquean la IP que Traefik registra como `ClientHost`: la IP que abrió la conexión con Traefik. El bloqueo solo es correcto si esa IP es la del cliente real.
+Las reglas 100132, 100134 y 100138 bloquean la IP que Traefik registra como `ClientHost`: la IP que abrió la conexión con Traefik. El bloqueo solo es correcto si esa IP es la del cliente real.
 
 | Caso | Qué registra Traefik | Resultado |
 | --- | --- | --- |
@@ -382,10 +384,10 @@ La IP de la PC tiene que aparecer en la lista. Si solo aparece la IP del firewal
 
 #### Deshabilitar la respuesta activa de Traefik
 
-Usar esto cuando no sea posible hacer llegar la IP real del cliente a Traefik. Las reglas 100132 y 100134 siguen generando alertas; solo se detiene el bloqueo automático. El bloqueo de SSH (reglas 5712, 5720 y 5763) está en otro bloque y no se ve afectado.
+Usar esto cuando no sea posible hacer llegar la IP real del cliente a Traefik. Las reglas 100132, 100134 y 100138 siguen generando alertas; solo se detiene el bloqueo automático. El bloqueo de SSH (reglas 5712, 5720 y 5763) está en otro bloque y no se ve afectado.
 
 1. En srv-gestion, abrir `config/wazuh_cluster/wazuh_manager.conf`.
-2. Buscar el bloque `<active-response>` que contiene `<rules_id>100132,100134</rules_id>`.
+2. Buscar el bloque `<active-response>` que contiene `<rules_id>100132,100134,100138</rules_id>`.
 3. En ese bloque, cambiar `<disabled>no</disabled>` por `<disabled>yes</disabled>`.
 4. Aplicar el cambio con el procedimiento de [Cambiar `wazuh_manager.conf` en una instalación existente](#cambiar-wazuh_managerconf-en-una-instalación-existente).
 5. Comprobar que el manager lo cargó:

@@ -327,15 +327,17 @@ They use the range reserved for local rules (100100 and up).
 | 100134 | 10 | Traefik: route scan, 50 different nonexistent paths in 60 s | 50 × 100133 from the same client IP, each on a different path, within 60 s |
 | 100135 | 10 | Traefik: flooding, 3000 requests in 30 s (100 req/s) | 3000 requests from the same client IP within 30 s |
 | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert per minute |
+| 100137 | 5 | Traefik: failed Django admin login | A `POST` to `/admin/login/` that answers 200. Django shows the form again on a failed login (a correct one answers 302) and does not log the failure |
+| 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 from the same client IP within 120 s |
 
-Rules 100130–100136 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client.
+Rules 100130–100138 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client.
 
 ### Active response
 
 | Command | Rules | Where it runs | Duration |
 | --- | --- | --- | --- |
 | `firewall-drop` | 5712, 5720 and 5763 (SSH brute force and failed logins) | On the agent that raised the alert (`local`) | 180 s |
-| `firewall-drop` | 100132 and 100134 (Traefik brute force and route scan) | On the agent that raised the alert (`local`) | 3600 s (1 h) |
+| `firewall-drop` | 100132, 100134 and 100138 (Traefik brute force, route scan and Django admin brute force) | On the agent that raised the alert (`local`) | 3600 s (1 h) |
 
 All agents (srv-databus, srv-infobus and srv-gestion) share the host network and have the `NET_ADMIN` capability, so `firewall-drop` writes to the host firewall and the block is real. The manager never blocks 127.0.0.1, the three project servers (`10.20.203.23`, `.24` and `.25`: Zabbix and Wazuh probes, and srv-infobus reading the GTFS from srv-databus) or the Docker internal networks (`172.16.0.0/12`). Rule 100135 (flooding) only raises an alert: several screens behind one NAT can cross the threshold without being an attack.
 
@@ -360,7 +362,7 @@ If a server IP is missing, a burst of errors between servers (for example, srv-i
 
 #### Requirement: the client IP must reach Traefik
 
-Rules 100132 and 100134 block the IP that Traefik records as `ClientHost`: the IP that opened the connection to Traefik. The block is only correct if that IP is the real client's.
+Rules 100132, 100134 and 100138 block the IP that Traefik records as `ClientHost`: the IP that opened the connection to Traefik. The block is only correct if that IP is the real client's.
 
 | Case | What Traefik records | Result |
 | --- | --- | --- |
@@ -382,10 +384,10 @@ The PC IP must appear in the list. If only the firewall IP appears, disable the 
 
 #### Disable the Traefik active response
 
-Use this when the real client IP cannot reach Traefik. Rules 100132 and 100134 keep raising alerts; only the automatic block stops. The SSH block (rules 5712, 5720 and 5763) is in a different block and is not affected.
+Use this when the real client IP cannot reach Traefik. Rules 100132, 100134 and 100138 keep raising alerts; only the automatic block stops. The SSH block (rules 5712, 5720 and 5763) is in a different block and is not affected.
 
 1. On srv-gestion, open `config/wazuh_cluster/wazuh_manager.conf`.
-2. Find the `<active-response>` block that contains `<rules_id>100132,100134</rules_id>`.
+2. Find the `<active-response>` block that contains `<rules_id>100132,100134,100138</rules_id>`.
 3. In that block, change `<disabled>no</disabled>` to `<disabled>yes</disabled>`.
 4. Apply the change with the procedure in [Change `wazuh_manager.conf` on an existing installation](#change-wazuh_managerconf-on-an-existing-installation).
 5. Check that the manager loaded it:

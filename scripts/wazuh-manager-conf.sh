@@ -488,6 +488,27 @@ LOCAL_RULES=$(cat <<'XML'
     <group>web,availability,</group>
   </rule>
 
+  <!-- R13: Django admin login (databus and infobus). A failed login answers
+       200 (the form is shown again) and a correct one answers 302; Django
+       does not log the failure and does not limit attempts, so the Traefik
+       access log is the only source. -->
+  <rule id="100137" level="5">
+    <if_sid>100130</if_sid>
+    <field name="RequestMethod" type="pcre2">^POST$</field>
+    <field name="RequestPath" type="pcre2">^/admin/login/</field>
+    <field name="DownstreamStatus" type="pcre2">^200$</field>
+    <description>Traefik: failed Django admin login on $(RequestHost) from $(ClientHost)</description>
+    <group>web,authentication_failed,</group>
+  </rule>
+
+  <rule id="100138" level="10" frequency="10" timeframe="120">
+    <if_matched_sid>100137</if_matched_sid>
+    <same_field>ClientHost</same_field>
+    <description>Traefik: Django admin brute force, 10 failed logins in 120 s from $(ClientHost)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>web,authentication_failures,</group>
+  </rule>
+
 </group>
 XML
 )
