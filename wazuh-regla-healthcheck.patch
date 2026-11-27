@@ -1,0 +1,70 @@
+diff --git a/README es.md b/README es.md
+index f0aab4a..8d8230e 100644
+--- a/README es.md	
++++ b/README es.md	
+@@ -378,6 +378,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
+ | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 en el mismo host y ruta, desde cualquier cliente, en 60 s. Solo alerta: un cliente con una URL vieja, no un ataque. Como máximo una alerta por minuto |
+ | 100137 | 5 | Traefik: failed Django admin login | Un `POST` a `/admin/login/` que responde 200. Ante un ingreso fallido Django vuelve a mostrar el formulario (uno correcto responde 302) y no registra el fallo |
+ | 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 desde la misma IP de cliente en 120 s |
++| 100140 | 0 | Docker: healthcheck en el contenedor … | El comando exacto de un healthcheck de los compose (la regla de fábrica 87907 alertaría con cada uno, cada 10-30 s por contenedor). Cualquier otro comando dentro de un contenedor sigue alertando. Actualizar la lista de la regla cuando cambie un healthcheck |
+ | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Regla de fábrica de Wazuh, sobrescrita (`overwrite="yes"`) solo para agregar al mensaje la IP bloqueada y la regla que disparó el bloqueo |
+ | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Igual que 651, para el desbloqueo |
+ 
+diff --git a/README.md b/README.md
+index 6611b4b..40ad353 100644
+--- a/README.md
++++ b/README.md
+@@ -378,6 +378,7 @@ They use the range reserved for local rules (100100 and up).
+ | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert per minute |
+ | 100137 | 5 | Traefik: failed Django admin login | A `POST` to `/admin/login/` that answers 200. Django shows the form again on a failed login (a correct one answers 302) and does not log the failure |
+ | 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 from the same client IP within 120 s |
++| 100140 | 0 | Docker: healthcheck in container … | The exact command of a healthcheck of the compose files (built-in rule 87907 would alert on each one, every 10-30 s per container). Any other command run in a container still alerts. Update the list in the rule when a healthcheck changes |
+ | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Built-in Wazuh rule, overwritten (`overwrite="yes"`) only to add the blocked IP and the rule that triggered the block to the message |
+ | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Same as 651, for the unblock |
+ 
+diff --git a/scripts/wazuh-manager-conf-es.sh b/scripts/wazuh-manager-conf-es.sh
+index 0043e7a..ca6cd2d 100644
+--- a/scripts/wazuh-manager-conf-es.sh
++++ b/scripts/wazuh-manager-conf-es.sh
+@@ -509,6 +509,18 @@ LOCAL_RULES=$(cat <<'XML'
+     <group>web,authentication_failures,</group>
+   </rule>
+ 
++  <!-- R15: healthchecks. Docker corre cada healthcheck como un exec (cada 10-30 s por
++       contenedor) y la regla de fabrica 87907 alerta con cada exec_start. Se callan solo
++       los comandos exactos de healthcheck de los compose (databus, infobus, Wazuh,
++       Zabbix); cualquier otro comando, o un comando de healthcheck con algo agregado,
++       sigue alertando, y la 87908 (shell) no se toca. Los signos menor que y mayor que van como \x3c y \x3e para
++       que el XML siga siendo valido. Actualizar la lista cuando cambie un healthcheck. -->
++  <rule id="100140" level="0">
++    <if_sid>87907</if_sid>
++    <field name="docker.Action" type="pcre2">^exec_start: (?:pg_isready -U \S+ -d \S+|rabbitmq-diagnostics status|mc ready local|/bin/sh -c (?:pg_isready -U \S+|redis-cli --no-auth-warning -a \$REDIS_PASSWORD ping \| grep PONG|timeout 5 bash -c 'cat \x3c /dev/null \x3e /dev/tcp/localhost/10051' \|\| exit 1|curl -sk -o /dev/null https://localhost:9200|curl -sk https://localhost:55000 \x3e /dev/null \|\| exit 1|curl -sk http://localhost:5601/api/status \x3e/dev/null \|\| exit 1|curl -sf -X POST http://localhost:8080/api_jsonrpc\.php \\\n-H "Content-Type: application/json" \\\n-d '\{"jsonrpc":"2\.0","method":"apiinfo\.version","params":\{\},"id":1\}' \|\| exit 1\n?))$</field>
++    <description>Docker: healthcheck en el contenedor $(docker.Actor.Attributes.name)</description>
++  </rule>
++
+   <!-- R14: reglas de fabrica 651 y 652 (bloqueo y desbloqueo de firewall-drop)
+        con la IP bloqueada y la regla que disparo el bloqueo en el mensaje.
+        Mismas condiciones y grupos que en 0015-ossec_rules.xml; solo cambia
+diff --git a/scripts/wazuh-manager-conf.sh b/scripts/wazuh-manager-conf.sh
+index e3b8c71..99783d4 100644
+--- a/scripts/wazuh-manager-conf.sh
++++ b/scripts/wazuh-manager-conf.sh
+@@ -509,6 +509,18 @@ LOCAL_RULES=$(cat <<'XML'
+     <group>web,authentication_failures,</group>
+   </rule>
+ 
++  <!-- R15: healthchecks. Docker runs each healthcheck as an exec (every 10-30 s per
++       container) and built-in rule 87907 alerts on every exec_start. Silence only the
++       exact healthcheck commands of the compose files (databus, infobus, Wazuh, Zabbix);
++       any other command, or a healthcheck command with something appended, still
++       alerts, and 87908 (shell) is not affected. The signs less-than and greater-than go as \x3c and \x3e so
++       the XML stays valid. Update the list when a healthcheck changes. -->
++  <rule id="100140" level="0">
++    <if_sid>87907</if_sid>
++    <field name="docker.Action" type="pcre2">^exec_start: (?:pg_isready -U \S+ -d \S+|rabbitmq-diagnostics status|mc ready local|/bin/sh -c (?:pg_isready -U \S+|redis-cli --no-auth-warning -a \$REDIS_PASSWORD ping \| grep PONG|timeout 5 bash -c 'cat \x3c /dev/null \x3e /dev/tcp/localhost/10051' \|\| exit 1|curl -sk -o /dev/null https://localhost:9200|curl -sk https://localhost:55000 \x3e /dev/null \|\| exit 1|curl -sk http://localhost:5601/api/status \x3e/dev/null \|\| exit 1|curl -sf -X POST http://localhost:8080/api_jsonrpc\.php \\\n-H "Content-Type: application/json" \\\n-d '\{"jsonrpc":"2\.0","method":"apiinfo\.version","params":\{\},"id":1\}' \|\| exit 1\n?))$</field>
++    <description>Docker: healthcheck in container $(docker.Actor.Attributes.name)</description>
++  </rule>
++
+   <!-- R14: built-in rules 651 and 652 (firewall-drop block and unblock) with
+        the blocked IP and the rule that triggered the block in the message.
+        Same conditions and groups as in 0015-ossec_rules.xml; only the

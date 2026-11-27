@@ -509,6 +509,18 @@ LOCAL_RULES=$(cat <<'XML'
     <group>web,authentication_failures,</group>
   </rule>
 
+  <!-- R15: healthchecks. Docker corre cada healthcheck como un exec (cada 10-30 s por
+       contenedor) y la regla de fabrica 87907 alerta con cada exec_start. Se callan solo
+       los comandos exactos de healthcheck de los compose (databus, infobus, Wazuh,
+       Zabbix, Traefik); cualquier otro comando, o un comando de healthcheck con algo agregado,
+       sigue alertando, y la 87908 (shell) no se toca. Los signos menor que y mayor que van como \x3c y \x3e para
+       que el XML siga siendo valido. Actualizar la lista cuando cambie un healthcheck. -->
+  <rule id="100140" level="0">
+    <if_sid>87907</if_sid>
+    <field name="docker.Action" type="pcre2">^exec_start: (?:pg_isready -U \S+ -d \S+|rabbitmq-diagnostics status|mc ready local|traefik healthcheck --ping|/bin/sh -c (?:pg_isready -U \S+|redis-cli --no-auth-warning -a \$REDIS_PASSWORD ping \| grep PONG|timeout 5 bash -c 'cat \x3c /dev/null \x3e /dev/tcp/localhost/10051' \|\| exit 1|curl -sk -o /dev/null https://localhost:9200|curl -sk https://localhost:55000 \x3e /dev/null \|\| exit 1|curl -sk http://localhost:5601/api/status \x3e/dev/null \|\| exit 1|curl -sf -X POST http://localhost:8080/api_jsonrpc\.php \\\n-H "Content-Type: application/json" \\\n-d '\{"jsonrpc":"2\.0","method":"apiinfo\.version","params":\{\},"id":1\}' \|\| exit 1\n?))$</field>
+    <description>Docker: healthcheck en el contenedor $(docker.Actor.Attributes.name)</description>
+  </rule>
+
   <!-- R14: reglas de fabrica 651 y 652 (bloqueo y desbloqueo de firewall-drop)
        con la IP bloqueada y la regla que disparo el bloqueo en el mensaje.
        Mismas condiciones y grupos que en 0015-ossec_rules.xml; solo cambia

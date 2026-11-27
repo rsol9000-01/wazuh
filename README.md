@@ -378,6 +378,7 @@ They use the range reserved for local rules (100100 and up).
 | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 on the same host and path, from any client, within 60 s. Alert only: a client with a stale URL, not an attack. At most one alert per minute |
 | 100137 | 5 | Traefik: failed Django admin login | A `POST` to `/admin/login/` that answers 200. Django shows the form again on a failed login (a correct one answers 302) and does not log the failure |
 | 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 from the same client IP within 120 s |
+| 100140 | 0 | Docker: healthcheck in container … | The exact command of a healthcheck of the compose files (built-in rule 87907 would alert on each one, every 10-30 s per container). Any other command run in a container still alerts. Update the list in the rule when a healthcheck changes |
 | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Built-in Wazuh rule, overwritten (`overwrite="yes"`) only to add the blocked IP and the rule that triggered the block to the message |
 | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Same as 651, for the unblock |
 

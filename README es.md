@@ -378,6 +378,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
 | 100136 | 7 | Traefik: missing route requested 50 times in 60 s | 50 × 100133 en el mismo host y ruta, desde cualquier cliente, en 60 s. Solo alerta: un cliente con una URL vieja, no un ataque. Como máximo una alerta por minuto |
 | 100137 | 5 | Traefik: failed Django admin login | Un `POST` a `/admin/login/` que responde 200. Ante un ingreso fallido Django vuelve a mostrar el formulario (uno correcto responde 302) y no registra el fallo |
 | 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 desde la misma IP de cliente en 120 s |
+| 100140 | 0 | Docker: healthcheck en el contenedor … | El comando exacto de un healthcheck de los compose (la regla de fábrica 87907 alertaría con cada uno, cada 10-30 s por contenedor). Cualquier otro comando dentro de un contenedor sigue alertando. Actualizar la lista de la regla cuando cambie un healthcheck |
 | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Regla de fábrica de Wazuh, sobrescrita (`overwrite="yes"`) solo para agregar al mensaje la IP bloqueada y la regla que disparó el bloqueo |
 | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Igual que 651, para el desbloqueo |
 
