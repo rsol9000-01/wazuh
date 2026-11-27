@@ -520,6 +520,27 @@ LOCAL_RULES=$(cat <<'XML'
     <field name="docker.Action" type="pcre2">^exec_start: (?:pg_isready -U \S+ -d \S+|rabbitmq-diagnostics status|mc ready local|traefik healthcheck --ping|/bin/sh -c (?:pg_isready -U \S+|redis-cli --no-auth-warning -a \$REDIS_PASSWORD ping \| grep PONG|timeout 5 bash -c 'cat \x3c /dev/null \x3e /dev/tcp/localhost/10051' \|\| exit 1|curl -sk -o /dev/null https://localhost:9200|curl -sk https://localhost:55000 \x3e /dev/null \|\| exit 1|curl -sk http://localhost:5601/api/status \x3e/dev/null \|\| exit 1|curl -sf -X POST http://localhost:8080/api_jsonrpc\.php \\\n-H "Content-Type: application/json" \\\n-d '\{"jsonrpc":"2\.0","method":"apiinfo\.version","params":\{\},"id":1\}' \|\| exit 1\n?))$</field>
     <description>Docker: healthcheck en el contenedor $(docker.Actor.Attributes.name)</description>
   </rule>
+  <!-- R16: ingreso a la API de databus (POST /api/login/, lo usa la app de los
+       operadores). Un ingreso fallido responde 400 ("Usuario o contraseña
+       incorrectos") y uno correcto 200, asi que la regla 100131 (401/403) no lo
+       ve. Django no registra el fallo ni limita los intentos: el access log de
+       Traefik es la unica fuente, igual que en R13. Solo databus tiene este endpoint. -->
+  <rule id="100141" level="5">
+    <if_sid>100130</if_sid>
+    <field name="RequestMethod" type="pcre2">^POST$</field>
+    <field name="RequestPath" type="pcre2">^/api/login/</field>
+    <field name="DownstreamStatus" type="pcre2">^400$</field>
+    <description>Traefik: ingreso fallido a la API de databus en $(RequestHost) desde $(ClientHost)</description>
+    <group>web,authentication_failed,</group>
+  </rule>
+
+  <rule id="100142" level="10" frequency="10" timeframe="120">
+    <if_matched_sid>100141</if_matched_sid>
+    <same_field>ClientHost</same_field>
+    <description>Traefik: fuerza bruta al ingreso de la API de databus, 10 ingresos fallidos en 120 s desde $(ClientHost)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>web,authentication_failures,</group>
+  </rule>
 
   <!-- R14: reglas de fabrica 651 y 652 (bloqueo y desbloqueo de firewall-drop)
        con la IP bloqueada y la regla que disparo el bloqueo en el mensaje.

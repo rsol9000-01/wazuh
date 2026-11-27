@@ -379,17 +379,19 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
 | 100137 | 5 | Traefik: failed Django admin login | Un `POST` a `/admin/login/` que responde 200. Ante un ingreso fallido Django vuelve a mostrar el formulario (uno correcto responde 302) y no registra el fallo |
 | 100138 | 10 | Traefik: Django admin brute force, 10 failed logins in 120 s | 10 × 100137 desde la misma IP de cliente en 120 s |
 | 100140 | 0 | Docker: healthcheck en el contenedor … | El comando exacto de un healthcheck de los compose (la regla de fábrica 87907 alertaría con cada uno, cada 10-30 s por contenedor). Cualquier otro comando dentro de un contenedor sigue alertando. Actualizar la lista de la regla cuando cambie un healthcheck |
+| 100141 | 5 | Traefik: ingreso fallido a la API de databus | Un `POST` a `/api/login/` que responde 400. La API de databus responde 400 a credenciales incorrectas (no 401), así que la regla 100131 no lo ve |
+| 100142 | 10 | Traefik: fuerza bruta al ingreso de la API de databus, 10 ingresos fallidos en 120 s | 10 × 100141 desde la misma IP de cliente en 120 s |
 | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Regla de fábrica de Wazuh, sobrescrita (`overwrite="yes"`) solo para agregar al mensaje la IP bloqueada y la regla que disparó el bloqueo |
 | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Igual que 651, para el desbloqueo |
 
-Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente. Como es hijo del decoder `json`, `local_decoder.xml` termina con `simovilab-json`, que decodifica todos los demás eventos JSON (escucha de Docker, registros de contenedores). Sin él esos eventos pierden sus campos y sus reglas nunca saltan. Tiene que quedar de último.
+Las reglas 100130–100138, 100141 y 100142 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente. Como es hijo del decoder `json`, `local_decoder.xml` termina con `simovilab-json`, que decodifica todos los demás eventos JSON (escucha de Docker, registros de contenedores). Sin él esos eventos pierden sus campos y sus reglas nunca saltan. Tiene que quedar de último.
 
 ### Respuesta activa
 
 | Comando | Reglas | Dónde se ejecuta | Duración |
 | --- | --- | --- | --- |
 | `firewall-drop` | 5712, 5720 y 5763 (fuerza bruta e intentos fallidos por SSH) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
-| `firewall-drop` | 100132, 100134 y 100138 (fuerza bruta y escaneo de rutas en Traefik, y fuerza bruta al admin de Django) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
+| `firewall-drop` | 100132, 100134, 100138 y 100142 (fuerza bruta y escaneo de rutas en Traefik, fuerza bruta al admin de Django y al ingreso de la API de databus) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 
 Todos los agentes (srv-databus, srv-infobus y srv-gestion) comparten la red del host y tienen la capacidad `NET_ADMIN`, así que `firewall-drop` escribe en el firewall del host y el bloqueo es real. El manager nunca bloquea 127.0.0.1, los tres servidores del proyecto (`10.20.203.23`, `.24` y `.25`: sondeos de Zabbix y Wazuh, y srv-infobus leyendo el GTFS de srv-databus) ni las redes internas de Docker (`172.16.0.0/12`). La regla 100135 (inundación) solo alerta: varias pantallas detrás de un mismo NAT pueden pasar el umbral sin ser un ataque.
 
@@ -414,7 +416,7 @@ Si falta la IP de un servidor, una ráfaga de errores entre servidores (por ejem
 
 #### Requisito: la IP del cliente tiene que llegar a Traefik
 
-Las reglas 100132, 100134 y 100138 bloquean la IP que Traefik registra como `ClientHost`: la IP que abrió la conexión con Traefik. El bloqueo solo es correcto si esa IP es la del cliente real.
+Las reglas 100132, 100134, 100138 y 100142 bloquean la IP que Traefik registra como `ClientHost`: la IP que abrió la conexión con Traefik. El bloqueo solo es correcto si esa IP es la del cliente real.
 
 | Caso | Qué registra Traefik | Resultado |
 | --- | --- | --- |
@@ -436,10 +438,10 @@ La IP de la PC tiene que aparecer en la lista. Si solo aparece la IP del firewal
 
 #### Deshabilitar la respuesta activa de Traefik
 
-Usar esto cuando no sea posible hacer llegar la IP real del cliente a Traefik. Las reglas 100132, 100134 y 100138 siguen generando alertas; solo se detiene el bloqueo automático. El bloqueo de SSH (reglas 5712, 5720 y 5763) está en otro bloque y no se ve afectado.
+Usar esto cuando no sea posible hacer llegar la IP real del cliente a Traefik. Las reglas 100132, 100134, 100138 y 100142 siguen generando alertas; solo se detiene el bloqueo automático. El bloqueo de SSH (reglas 5712, 5720 y 5763) está en otro bloque y no se ve afectado.
 
 1. En srv-gestion, abrir `config/wazuh_cluster/wazuh_manager.conf`.
-2. Buscar el bloque `<active-response>` que contiene `<rules_id>100132,100134,100138</rules_id>`.
+2. Buscar el bloque `<active-response>` que contiene `<rules_id>100132,100134,100138,100142</rules_id>`.
 3. En ese bloque, cambiar `<disabled>no</disabled>` por `<disabled>yes</disabled>`.
 4. Aplicar el cambio con el procedimiento de [Cambiar `wazuh_manager.conf` en una instalación existente](#cambiar-wazuh_managerconf-en-una-instalación-existente).
 5. Comprobar que el manager lo cargó:
