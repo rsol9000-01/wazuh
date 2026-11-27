@@ -73,6 +73,7 @@ La interfaz queda en `https://<servidor>:6443`, con el usuario `MY_USERNAME` y l
   - Instala `rsyslog` si no existe `/var/log/auth.log`, para que lleguen los eventos de SSH.
   - Instala `curl` si falta.
 - Memoria suficiente para el indexer, que arranca con 1 GB de heap (`OPENSEARCH_JAVA_OPTS`).
+- El reloj sincronizado por NTP, con el mismo servidor NTP en srv-gestion, srv-databus y srv-infobus. Ver [Sincronizar el reloj](#sincronizar-el-reloj).
 - Puertos abiertos en el firewall del servidor:
 
 | Puerto | Uso |
@@ -83,6 +84,51 @@ La interfaz queda en `https://<servidor>:6443`, con el usuario `MY_USERNAME` y l
 | `55000/tcp` | API del manager |
 | `9200/tcp` | API del indexer |
 | `6443/tcp` | Interfaz web (HTTPS) |
+
+#### Sincronizar el reloj
+
+Aplicar esto en srv-gestion, srv-databus y srv-infobus, con **el mismo servidor NTP en los tres**. Las alertas, los bloqueos y los tiempos de detección se comparan entre los tres servidores: un desfase de reloj entre ellos vuelve incorrectos esos tiempos. Los contenedores toman la hora del host, así que no hace falta reiniciarlos.
+
+1. Revisar el estado actual:
+
+```bash
+timedatectl | grep -E "synchronized|NTP service"
+```
+
+2. Editar `/etc/systemd/timesyncd.conf` y definir el servidor NTP en la sección `[Time]`. Usar el gateway de la red u otro servidor NTP que los tres servidores alcancen:
+
+```ini
+[Time]
+NTP=<IP del servidor NTP>
+```
+
+Para usar el gateway de la red sin editar el archivo a mano:
+
+```bash
+GW=$(ip route | awk '/^default/ {print $3; exit}')
+sudo sed -i "s/^#\?NTP=.*/NTP=$GW/" /etc/systemd/timesyncd.conf
+```
+
+3. Activar la sincronización y reiniciar el servicio:
+
+```bash
+sudo timedatectl set-ntp true
+sudo systemctl restart systemd-timesyncd
+```
+
+4. Probarlo después de unos 30 s:
+
+```bash
+timedatectl timesync-status | grep -E "Server|Packet count|Offset"
+timedatectl | grep -E "synchronized|NTP service"
+```
+
+| Resultado | Significado |
+| --- | --- |
+| `Server` muestra la IP configurada, `Packet count` es mayor que 0, `System clock synchronized: yes` y `NTP service: active` | Sincronizado |
+| `Packet count: 0` | El servidor NTP no responde: el firewall bloquea `123/udp` o ese servidor no da hora. Usar otro servidor NTP |
+
+Repetir la prueba en los tres servidores: `Server` tiene que mostrar la misma IP en todos.
 
 #### 2. Configurar el `.env`
 
@@ -218,6 +264,7 @@ En uno o dos minutos el agente aparece en la interfaz, en **Agents**, dentro de 
 - Salida hacia el servidor por `1514/tcp` y `1515/tcp`.
 - Docker Engine con Compose v2 y el grupo `docker`. Ejecutar el script como **root** (`sudo`), porque instala `rsyslog` si hace falta.
 - La aplicación desplegada en la ruta que se va a declarar en `PROJECT_PATH`.
+- El reloj sincronizado con el mismo servidor NTP que el servidor. Ver [Sincronizar el reloj](#sincronizar-el-reloj).
 
 #### 2. Configurar el `.env`
 
