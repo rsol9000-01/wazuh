@@ -345,6 +345,8 @@ sudo ./scripts/wazuh-dev.sh agent
 
 "Sin diferencias" quiere decir que Wazuh avisa que el archivo cambió, pero no muestra el contenido, para no exponer credenciales en las alertas.
 
+Además, todos los agentes vigilan los archivos de sistema del servidor, desde `agent/conf/ossec.conf`: `/etc`, `/usr/bin` y `/usr/sbin` en tiempo real y `/boot` cada 12 horas. El agente corre en Docker, así que los lee bajo `/host` (la raíz del servidor, montada en solo lectura) y las alertas muestran la ruta con ese prefijo, por ejemplo `/host/etc/passwd`. Sin el prefijo, FIM vigilaría la imagen del agente y no el servidor.
+
 ### Reglas del proyecto
 
 Están en el rango reservado para reglas locales (100100 en adelante). Las descripciones son las que muestra Wazuh.

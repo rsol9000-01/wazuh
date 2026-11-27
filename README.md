@@ -345,6 +345,8 @@ sudo ./scripts/wazuh-dev.sh agent
 
 "No diffs" means Wazuh reports that the file changed but does not show its content, so credentials never appear in alerts.
 
+Every agent also watches the server system files, from `agent/conf/ossec.conf`: `/etc`, `/usr/bin` and `/usr/sbin` in real time and `/boot` every 12 hours. The agent runs in Docker, so it reads them under `/host` (the server root, mounted read-only) and the alerts show the path with that prefix, for example `/host/etc/passwd`. Without the prefix FIM would watch the agent image, not the server.
+
 ### Project rules
 
 They use the range reserved for local rules (100100 and up).
