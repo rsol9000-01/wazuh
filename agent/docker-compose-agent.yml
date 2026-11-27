@@ -16,8 +16,21 @@ services:
     # El agente no necesita la red de la aplicación: lee logs y archivos
     # montados y consulta Docker por el socket.
     network_mode: host
+    # SCA (CIS) del host: el agente ve el host para evaluar el servidor y no
+    # la imagen del contenedor. pid: host + SYS_ADMIN + SYS_PTRACE permiten
+    # correr los comandos de las politicas con nsenter en los namespaces del
+    # host (PID 1); / montado en /host (solo lectura) sirve a los controles de
+    # archivos. pid: host SOLO con la imagen construida desde agent/Dockerfile:
+    # la imagen oficial (s6-overlay) mata al detenerse todos los procesos que
+    # ve, y con pid: host son los del servidor; el Dockerfile quita ese paso.
+    # Ver agent/sca_host.py y "Configuration assessment (CIS)" en el README.
+    pid: host
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
     #privileged: true
     deploy:
       resources:
@@ -50,6 +63,7 @@ services:
       # Traefik access log (JSON). Wazuh reads it at /home/traefik/logs/access.log
       - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
       - /etc/os-release:/etc/os-release:ro
+      - /:/host:ro
       #- /sys:/sys:ro
       #- /etc:/host/etc:ro
       #- /var/run:/var/run

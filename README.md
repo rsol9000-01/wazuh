@@ -459,9 +459,37 @@ The output must show `<disabled>yes</disabled>`. To enable it again, repeat the 
 | `wazuh-dashboard-config`, `wazuh-dashboard-custom` | wazuh.dashboard | Dashboard configuration and assets |
 | `wazuh_agent_etc` | wazuh.agent | Agent configuration and key |
 
+### Configuration assessment (CIS)
+
+The agents run in Docker, so the official SCA policies would evaluate the agent image instead of the server. At startup, `agent/sca_host.py` builds a "host" copy of the official policy of the host operating system, taken from the same Wazuh version (downloaded when the agent image is built):
+
+| In the official policy | In the host policy |
+| --- | --- |
+| `f:` and `d:` checks (files and folders) | Read under `/host`, the host root mounted read-only |
+| `c:` checks (commands such as `systemctl`, `sshd -T` or `dpkg-query`) | Run in the host namespaces with `nsenter -t 1 -m -u -i -n -p --` |
+| Policy id and name | Suffix `_host` and ` (host)` |
+
+The policy is chosen from `ID` and `VERSION_ID` in `/host/etc/os-release` (Ubuntu, Debian, RHEL, Rocky, AlmaLinux, Oracle Linux, CentOS, Amazon Linux and SLES), and only that one is built. The `requirements` block of the official policies is not used to choose: several only check that a file exists, so the Debian 7 to 10 policies would also pass on Ubuntu. If no policy matches the host, the distribution-independent Linux policy is used. The policies of the agent image are disabled. If `/host` or the policies are missing, SCA is turned off instead of reporting on the container. `chroot` is not used: `systemctl` cannot reach systemd from a chroot.
+
+The manager's own SCA (agent 000) is off, because it would evaluate the manager container. srv-gestion is evaluated by its own agent.
+
+The agent service needs, in `agent/docker-compose-agent.yml` and in `docker-compose.yml`: `pid: host`, `SYS_ADMIN` and `SYS_PTRACE` in `cap_add`, `apparmor=unconfined` in `security_opt` and the volume `/:/host:ro`. The host PID namespace is required: without it, `systemctl` and `ps` fail inside the host namespaces.
+
+**Use `pid: host` only with the image built from `agent/Dockerfile`.** The official agent image uses s6-overlay, which kills every process it can see when the container stops (`s6-nuke`). With `pid: host` those are all the processes of the server: SSH sessions, Docker and the application containers. `agent/Dockerfile` removes that step and the build fails if it is still there.
+
+Check it on each server after starting the agent:
+
+```bash
+docker logs wazuh.agent 2>&1 | grep "SCA:"
+docker exec wazuh.agent ls /var/ossec/etc/sca-host
+```
+
+The log must show `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (with the host operating system) and `SCA: host policies enabled.`, and the folder must hold only one file. In the dashboard (☰ → **Configuration Assessment** → agent), the policy name must end in `(host)`, for example `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
+
 ## Security notes
 
 - **Credentials:** they go only in `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` and `config/wazuh_indexer_ssl_certs/`, which are in `.gitignore`. Replace every `CAMBIAR` before deploying.
+- **Host view for SCA:** the agents get `pid: host`, `SYS_ADMIN`, `SYS_PTRACE`, AppArmor unconfined and the host root read-only at `/host`. They can read the whole host and run commands in its namespaces. The real risk does not grow, because the Docker socket already gives equivalent access, but a compromised agent can do more directly. Removing those lines turns SCA off by itself.
 - **Docker socket:** agents mount it read-only to read container logs. That grants significant host access; rule 100122 alerts if the socket changes.
 - **Certificates:** they are self-signed, for communication between the indexer, the manager and the dashboard. To expose the frontend outside the internal network, put a proxy with a valid certificate in front.
 - **Firewall:** open `1514/tcp` and `1515/tcp` only to the agents, and `6443/tcp`, `55000/tcp` and `9200/tcp` only to the management network.
@@ -476,4 +504,5 @@ The output must show `<disabled>yes</disabled>`. To enable it again, repeat the 
 - [`scripts/wazuh-dev.sh`](scripts/wazuh-dev.sh): server and agent deployment.
 - [`scripts/wazuh-manager-conf.sh`](scripts/wazuh-manager-conf.sh): groups, `agent.conf` and rules loaded by `wazuh-init`.
 - [`scripts/wazuh-agent-conf.sh`](scripts/wazuh-agent-conf.sh): agent startup and enrollment.
+- [`agent/sca_host.py`](agent/sca_host.py): builds the host SCA (CIS) policies.
 - [`diagramas/`](diagramas/): architecture diagram in draw.io, SVG and PNG.

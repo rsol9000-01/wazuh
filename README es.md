@@ -459,9 +459,37 @@ La salida tiene que mostrar `<disabled>yes</disabled>`. Para volver a habilitarl
 | `wazuh-dashboard-config`, `wazuh-dashboard-custom` | wazuh.dashboard | Configuración y recursos del dashboard |
 | `wazuh_agent_etc` | wazuh.agent | Configuración y llave del agente |
 
+### Evaluación de configuración (CIS)
+
+Los agentes corren en Docker, así que las políticas SCA oficiales evaluarían la imagen del agente en lugar del servidor. Al arrancar, `agent/sca_host.py` arma una copia "del host" de la política oficial del sistema operativo del host, tomada de la misma versión de Wazuh (se descarga al construir la imagen del agente):
+
+| En la política oficial | En la política del host |
+| --- | --- |
+| Controles `f:` y `d:` (archivos y carpetas) | Se leen bajo `/host`, la raíz del host montada en solo lectura |
+| Controles `c:` (comandos como `systemctl`, `sshd -T` o `dpkg-query`) | Corren en los namespaces del host con `nsenter -t 1 -m -u -i -n -p --` |
+| Id y nombre de la política | Sufijo `_host` y ` (host)` |
+
+La política se elige con `ID` y `VERSION_ID` de `/host/etc/os-release` (Ubuntu, Debian, RHEL, Rocky, AlmaLinux, Oracle Linux, CentOS, Amazon Linux y SLES) y solo se arma esa. El bloque `requirements` de las políticas oficiales no sirve para elegir: varias solo revisan que exista un archivo, así que las políticas de Debian 7 a 10 también pasarían en Ubuntu. Si ninguna política coincide con el host, se usa la política de Linux independiente de la distribución. Las políticas de la imagen del agente quedan desactivadas. Si falta `/host` o faltan las políticas, SCA se apaga en lugar de informar sobre el contenedor. No se usa `chroot`: desde un chroot `systemctl` no llega a systemd.
+
+El SCA propio del manager (agente 000) está apagado, porque evaluaría el contenedor del manager. srv-gestion lo evalúa su propio agente.
+
+El servicio del agente necesita, en `agent/docker-compose-agent.yml` y en `docker-compose.yml`: `pid: host`, `SYS_ADMIN` y `SYS_PTRACE` en `cap_add`, `apparmor=unconfined` en `security_opt` y el volumen `/:/host:ro`. El namespace de PID del host es obligatorio: sin él, `systemctl` y `ps` fallan dentro de los namespaces del host.
+
+**Usar `pid: host` solo con la imagen construida desde `agent/Dockerfile`.** La imagen oficial del agente usa s6-overlay, que al detener el contenedor mata todos los procesos que ve (`s6-nuke`). Con `pid: host` son todos los procesos del servidor: sesiones SSH, Docker y los contenedores de la aplicación. `agent/Dockerfile` quita ese paso y la construcción falla si sigue ahí.
+
+Comprobarlo en cada servidor después de arrancar el agente:
+
+```bash
+docker logs wazuh.agent 2>&1 | grep "SCA:"
+docker exec wazuh.agent ls /var/ossec/etc/sca-host
+```
+
+El registro tiene que mostrar `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (con el sistema operativo del host) y `SCA: politicas del host activadas.` (o `SCA: host policies enabled.` con el script en inglés). La carpeta tiene que tener un solo archivo. En el dashboard (☰ → **Configuration Assessment** → agente), el nombre de la política tiene que terminar en `(host)`, por ejemplo `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
+
 ## Notas de seguridad
 
 - **Credenciales:** van solo en `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` y `config/wazuh_indexer_ssl_certs/`, que están en `.gitignore`. Reemplazar todos los `CAMBIAR` antes de desplegar.
+- **Vista del host para SCA:** los agentes reciben `pid: host`, `SYS_ADMIN`, `SYS_PTRACE`, AppArmor sin confinar y la raíz del host en solo lectura en `/host`. Pueden leer todo el host y correr comandos en sus namespaces. El riesgo real no crece, porque el socket de Docker ya da un acceso equivalente, pero un agente comprometido puede hacer más de forma directa. Si se quitan esas líneas, SCA se apaga solo.
 - **Socket de Docker:** los agentes lo montan en modo solo lectura para leer los registros de los contenedores. Eso da mucho acceso al host; la regla 100122 avisa si el socket cambia.
 - **Certificados:** son autofirmados, para la comunicación entre el indexer, el manager y el dashboard. Para exponer la interfaz fuera de la red interna, poner delante un proxy con un certificado válido.
 - **Firewall:** abrir `1514/tcp` y `1515/tcp` solo para los agentes, y `6443/tcp`, `55000/tcp` y `9200/tcp` solo para la red de administración.
@@ -476,4 +504,5 @@ La salida tiene que mostrar `<disabled>yes</disabled>`. Para volver a habilitarl
 - [`scripts/wazuh-dev.sh`](scripts/wazuh-dev.sh): despliegue de servidor y agente.
 - [`scripts/wazuh-manager-conf.sh`](scripts/wazuh-manager-conf.sh): grupos, `agent.conf` y reglas que carga `wazuh-init`.
 - [`scripts/wazuh-agent-conf.sh`](scripts/wazuh-agent-conf.sh): arranque y enrolamiento del agente.
+- [`agent/sca_host.py`](agent/sca_host.py): arma las políticas SCA (CIS) del host.
 - [`diagramas/`](diagramas/): diagrama de la arquitectura en draw.io, SVG y PNG.

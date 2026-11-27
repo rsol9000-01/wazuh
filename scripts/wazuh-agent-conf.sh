@@ -66,6 +66,33 @@ if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Build the SCA (CIS) policies for the host
+# The official policies would evaluate this container. sca_host.py rewrites
+# the one of the host operating system (from /host/etc/os-release) to read
+# /host and to run its commands in the host namespaces. If anything fails,
+# SCA is turned off so no misleading report is sent.
+# ---------------------------------------------------------------------------
+SCA_DIR=/var/ossec/etc/sca-host
+rm -rf "$SCA_DIR"
+if [ -d /host/etc ] && [ -d /opt/sca-src ] && python3 /opt/sca_host.py /opt/sca-src "$SCA_DIR"; then
+    POLICIES=""
+    for f in "$SCA_DIR"/*_host.yml; do
+        POLICIES="${POLICIES}<policy>etc/sca-host/$(basename "$f")</policy>"
+    done
+    for f in /var/ossec/ruleset/sca/*.yml; do
+        [ -e "$f" ] && POLICIES="${POLICIES}<policy enabled=\"no\">ruleset/sca/$(basename "$f")</policy>"
+    done
+    chown -R root:wazuh "$SCA_DIR"
+    chmod 750 "$SCA_DIR"
+    chmod 640 "$SCA_DIR"/*.yml
+    sed -i "s|<!-- SCA_HOST_POLICIES -->|${POLICIES}|" /var/ossec/etc/ossec.conf
+    echo "SCA: host policies enabled."
+else
+    sed -i "/<sca>/,/<\/sca>/ s|<enabled>yes</enabled>|<enabled>no</enabled>|" /var/ossec/etc/ossec.conf
+    echo "SCA: host view not available (/host or /opt/sca-src missing). SCA disabled."
+fi
+
+# ---------------------------------------------------------------------------
 # Hand control over to the image's original entry point
 # ---------------------------------------------------------------------------
 exec /init "$@"

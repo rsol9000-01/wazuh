@@ -66,6 +66,33 @@ if [ -n "${WAZUH_AGENT_NAME:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Armar las politicas SCA (CIS) del host
+# Las politicas oficiales evaluarian este contenedor. sca_host.py las reescribe
+# la del sistema operativo del host (segun /host/etc/os-release) para leer
+# /host y correr sus comandos en los namespaces del host. Si algo falla, se
+# apaga SCA para no enviar un informe equivocado.
+# ---------------------------------------------------------------------------
+SCA_DIR=/var/ossec/etc/sca-host
+rm -rf "$SCA_DIR"
+if [ -d /host/etc ] && [ -d /opt/sca-src ] && python3 /opt/sca_host.py /opt/sca-src "$SCA_DIR"; then
+    POLICIES=""
+    for f in "$SCA_DIR"/*_host.yml; do
+        POLICIES="${POLICIES}<policy>etc/sca-host/$(basename "$f")</policy>"
+    done
+    for f in /var/ossec/ruleset/sca/*.yml; do
+        [ -e "$f" ] && POLICIES="${POLICIES}<policy enabled=\"no\">ruleset/sca/$(basename "$f")</policy>"
+    done
+    chown -R root:wazuh "$SCA_DIR"
+    chmod 750 "$SCA_DIR"
+    chmod 640 "$SCA_DIR"/*.yml
+    sed -i "s|<!-- SCA_HOST_POLICIES -->|${POLICIES}|" /var/ossec/etc/ossec.conf
+    echo "SCA: politicas del host activadas."
+else
+    sed -i "/<sca>/,/<\/sca>/ s|<enabled>yes</enabled>|<enabled>no</enabled>|" /var/ossec/etc/ossec.conf
+    echo "SCA: sin vista del host (falta /host o /opt/sca-src). SCA apagado."
+fi
+
+# ---------------------------------------------------------------------------
 # Transferir el control al punto de entrada original de la imagen
 # ---------------------------------------------------------------------------
 exec /init "$@"
