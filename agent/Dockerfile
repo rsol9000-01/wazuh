@@ -15,3 +15,14 @@ COPY sca_host.py /opt/sca_host.py
 # Remove those two steps and stop the build if any is left.
 RUN sed -i '/s6-nuke/d' /etc/s6/init/init-stage3 && \
     ! grep -q s6-nuke /etc/s6/init/init-stage3
+# Package inventory (syscollector, used by vulnerability detection) must list
+# the packages of the server, not of this image. The host dpkg database is
+# mounted at /var/lib/dpkg (see the compose files). Remove the rpm database
+# and the Python package metadata of the image so they are not reported as
+# packages of the server. Keep this step last: dnf cannot run after it.
+# The imports check that the agent scripts still work.
+RUN rm -rf /var/lib/rpm /usr/lib/sysimage/rpm && \
+    find $(ls -d /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 2>/dev/null) \
+         -path '*python3*' \( -name '*.dist-info' -o -name '*.egg-info' \) -prune \
+         -exec rm -rf {} + && \
+    python3 -c "import docker, yaml, requests, urllib3"

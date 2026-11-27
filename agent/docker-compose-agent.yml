@@ -62,7 +62,10 @@ services:
       - /var/log:/var/log:ro
       # Traefik access log (JSON). Wazuh reads it at /home/traefik/logs/access.log
       - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
+      # Inventory of the server: operating system and dpkg packages of the
+      # host (vulnerability detection). See agent/Dockerfile.
       - /etc/os-release:/etc/os-release:ro
+      - /var/lib/dpkg:/var/lib/dpkg:ro
       - /:/host:ro
       #- /sys:/sys:ro
       #- /etc:/host/etc:ro

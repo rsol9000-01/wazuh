@@ -267,9 +267,10 @@ services:
       - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
       - wazuh_agent_etc:/var/ossec/etc
       - /:/host:ro
-      # - /etc:/host/etc:ro                     # opcional, para FIM del host
-      # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
-      #- /etc/os-release:/etc/os-release:ro
+      # Inventory of the server: operating system and dpkg packages of the
+      # host (vulnerability detection). See agent/Dockerfile.
+      - /etc/os-release:/etc/os-release:ro
+      - /var/lib/dpkg:/var/lib/dpkg:ro
     entrypoint: ["/init_01.sh"]
     depends_on:
       wazuh-init:

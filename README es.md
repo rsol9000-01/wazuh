@@ -488,6 +488,28 @@ docker exec wazuh.agent ls /var/ossec/etc/sca-host
 
 El registro tiene que mostrar `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (con el sistema operativo del host) y `SCA: politicas del host activadas.` (o `SCA: host policies enabled.` con el script en inglés). La carpeta tiene que tener un solo archivo. En el dashboard (☰ → **Configuration Assessment** → agente), el nombre de la política tiene que terminar en `(host)`, por ejemplo `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
 
+### Inventario, vulnerabilidades y rootcheck
+
+Los demás módulos del agente que miran el host siguen la misma regla: tienen que describir el servidor, no la imagen del agente.
+
+| Módulo | Qué lee | Cómo |
+| --- | --- | --- |
+| Inventario (syscollector): hardware, sistema operativo, red, puertos y procesos | El servidor | `pid: host`, `network_mode: host` y el `/etc/os-release` del host |
+| Inventario: paquetes (los usa la detección de vulnerabilidades) | Paquetes dpkg del servidor | `/var/lib/dpkg` del host montado en solo lectura. `agent/Dockerfile` borra la base rpm y los metadatos de paquetes Python de la imagen, para que no aparezcan como paquetes del servidor |
+| Inventario: usuarios, grupos y servicios | — | Apagados: describirían la imagen del agente |
+| Rootcheck | Archivos, `/dev` y carpetas de sistema del servidor | `<base_directory>/host</base_directory>`; ignora `/host/sys`, `/host/proc` y los datos de Docker |
+
+No cubre: paquetes snap ni paquetes Python o npm instalados fuera de dpkg en el servidor.
+
+Revisarlo después de levantar el agente:
+
+```bash
+docker exec wazuh.agent ls /var/lib/dpkg/status
+docker exec wazuh.agent ls /var/lib/rpm
+```
+
+El primer comando tiene que mostrar el archivo y el segundo tiene que fallar. En el dashboard (☰ → **Inventory data** → agente → **Packages**), los paquetes tienen que ser `deb` de Ubuntu, no `rpm` de Amazon Linux.
+
 ## Notas de seguridad
 
 - **Credenciales:** van solo en `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` y `config/wazuh_indexer_ssl_certs/`, que están en `.gitignore`. Reemplazar todos los `CAMBIAR` antes de desplegar.

@@ -488,6 +488,28 @@ docker exec wazuh.agent ls /var/ossec/etc/sca-host
 
 The log must show `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (with the host operating system) and `SCA: host policies enabled.`, and the folder must hold only one file. In the dashboard (☰ → **Configuration Assessment** → agent), the policy name must end in `(host)`, for example `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
 
+### Inventory, vulnerabilities and rootcheck
+
+The other host modules of the agent follow the same rule: they must describe the server, not the agent image.
+
+| Module | What it reads | How |
+| --- | --- | --- |
+| Inventory (syscollector): hardware, operating system, network, ports and processes | The server | `pid: host`, `network_mode: host` and `/etc/os-release` of the host |
+| Inventory: packages (used by vulnerability detection) | dpkg packages of the server | `/var/lib/dpkg` of the host mounted read-only. `agent/Dockerfile` removes the rpm database and the Python package metadata of the image, so they are not reported as server packages |
+| Inventory: users, groups and services | — | Off: they would describe the agent image |
+| Rootcheck | Files, `/dev` and system folders of the server | `<base_directory>/host</base_directory>`; ignores `/host/sys`, `/host/proc` and the Docker data |
+
+Not covered: snap packages and Python or npm packages installed outside dpkg on the server.
+
+Check it after starting the agent:
+
+```bash
+docker exec wazuh.agent ls /var/lib/dpkg/status
+docker exec wazuh.agent ls /var/lib/rpm
+```
+
+The first command must show the file and the second one must fail. In the dashboard (☰ → **Inventory data** → agent → **Packages**), the packages must be `deb` from Ubuntu, not `rpm` from Amazon Linux.
+
 ## Security notes
 
 - **Credentials:** they go only in `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` and `config/wazuh_indexer_ssl_certs/`, which are in `.gitignore`. Replace every `CAMBIAR` before deploying.
