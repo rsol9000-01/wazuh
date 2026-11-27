@@ -381,7 +381,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
 | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Regla de fábrica de Wazuh, sobrescrita (`overwrite="yes"`) solo para agregar al mensaje la IP bloqueada y la regla que disparó el bloqueo |
 | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Igual que 651, para el desbloqueo |
 
-Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
+Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente. Como es hijo del decoder `json`, `local_decoder.xml` termina con `simovilab-json`, que decodifica todos los demás eventos JSON (escucha de Docker, registros de contenedores). Sin él esos eventos pierden sus campos y sus reglas nunca saltan. Tiene que quedar de último.
 
 ### Respuesta activa
 

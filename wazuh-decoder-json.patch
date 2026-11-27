@@ -1,0 +1,68 @@
+diff --git a/README es.md b/README es.md
+index ed3dcf5..98a90a8 100644
+--- a/README es.md	
++++ b/README es.md	
+@@ -381,7 +381,7 @@ Están en el rango reservado para reglas locales (100100 en adelante). Las descr
+ | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Regla de fábrica de Wazuh, sobrescrita (`overwrite="yes"`) solo para agregar al mensaje la IP bloqueada y la regla que disparó el bloqueo |
+ | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Igual que 651, para el desbloqueo |
+ 
+-Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente.
++Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del cliente (`ClientHost`). El decoder local `simovilab-traefik` copia esa IP a `srcip`, el campo que usa la respuesta activa para bloquear a un cliente. Como es hijo del decoder `json`, `local_decoder.xml` termina con `simovilab-json`, que decodifica todos los demás eventos JSON (escucha de Docker, registros de contenedores). Sin él esos eventos pierden sus campos y sus reglas nunca saltan. Tiene que quedar de último.
+ 
+ ### Respuesta activa
+ 
+diff --git a/README.md b/README.md
+index ff82d24..fefe381 100644
+--- a/README.md
++++ b/README.md
+@@ -381,7 +381,7 @@ They use the range reserved for local rules (100100 and up).
+ | 651 | 3 | Host Blocked by firewall-drop Active Response: *IP* (rule *ID*) | Built-in Wazuh rule, overwritten (`overwrite="yes"`) only to add the blocked IP and the rule that triggered the block to the message |
+ | 652 | 3 | Host Unblocked by firewall-drop Active Response: *IP* (rule *ID*) | Same as 651, for the unblock |
+ 
+-Rules 100130–100138 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client.
++Rules 100130–100138 read Traefik's access log, which records the client IP (`ClientHost`). The local decoder `simovilab-traefik` copies that IP into `srcip`, the field that active responses use to block a client. Because it is a child of the `json` decoder, `local_decoder.xml` ends with `simovilab-json`, which decodes every other JSON event (Docker listener, container logs). Without it those events lose their fields and their rules never fire. Keep it last.
+ 
+ ### Active response
+ 
+diff --git a/scripts/wazuh-manager-conf-es.sh b/scripts/wazuh-manager-conf-es.sh
+index df927b2..0043e7a 100644
+--- a/scripts/wazuh-manager-conf-es.sh
++++ b/scripts/wazuh-manager-conf-es.sh
+@@ -564,6 +564,16 @@ LOCAL_DECODER=$(cat <<'XML'
+   <regex type="pcre2">"ClientHost":"([^"]+)"</regex>
+   <order>srcip</order>
+ </decoder>
++
++<!-- Todos los demás eventos JSON: escucha de Docker (reglas 87900-87959), registros de
++     contenedores (regla 100100 y sus hijas) y el resto. Cuando json tiene hijos, Wazuh solo
++     extrae los campos de un evento JSON por medio de un hijo que coincida: sin este decoder
++     esos eventos quedan con el nombre json pero sin campos, y ninguna regla salta. No tiene
++     prematch, así que tiene que ir de último: toma todo evento JSON que no sea de Traefik. -->
++<decoder name="simovilab-json">
++  <parent>json</parent>
++  <plugin_decoder>JSON_Decoder</plugin_decoder>
++</decoder>
+ XML
+ )
+ printf '%s\n' "$LOCAL_DECODER" > /tmp/local_decoder.xml
+diff --git a/scripts/wazuh-manager-conf.sh b/scripts/wazuh-manager-conf.sh
+index 242fcb5..e3b8c71 100644
+--- a/scripts/wazuh-manager-conf.sh
++++ b/scripts/wazuh-manager-conf.sh
+@@ -564,6 +564,16 @@ LOCAL_DECODER=$(cat <<'XML'
+   <regex type="pcre2">"ClientHost":"([^"]+)"</regex>
+   <order>srcip</order>
+ </decoder>
++
++<!-- Every other JSON event: Docker listener (rules 87900-87959), container logs
++     (rule 100100 and its children) and the rest. Once json has children, Wazuh decodes the
++     fields of a JSON event only through a child that matches: without this decoder those
++     events keep the name json but lose every field and no rule fires. It has no prematch,
++     so it must stay last: it takes every JSON event that is not from Traefik. -->
++<decoder name="simovilab-json">
++  <parent>json</parent>
++  <plugin_decoder>JSON_Decoder</plugin_decoder>
++</decoder>
+ XML
+ )
+ printf '%s\n' "$LOCAL_DECODER" > /tmp/local_decoder.xml

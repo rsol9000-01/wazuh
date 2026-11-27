@@ -564,6 +564,16 @@ LOCAL_DECODER=$(cat <<'XML'
   <regex type="pcre2">"ClientHost":"([^"]+)"</regex>
   <order>srcip</order>
 </decoder>
+
+<!-- Todos los demás eventos JSON: escucha de Docker (reglas 87900-87959), registros de
+     contenedores (regla 100100 y sus hijas) y el resto. Cuando json tiene hijos, Wazuh solo
+     extrae los campos de un evento JSON por medio de un hijo que coincida: sin este decoder
+     esos eventos quedan con el nombre json pero sin campos, y ninguna regla salta. No tiene
+     prematch, así que tiene que ir de último: toma todo evento JSON que no sea de Traefik. -->
+<decoder name="simovilab-json">
+  <parent>json</parent>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
 XML
 )
 printf '%s\n' "$LOCAL_DECODER" > /tmp/local_decoder.xml
