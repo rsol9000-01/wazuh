@@ -513,6 +513,15 @@ docker exec wazuh.agent ls /var/lib/rpm
 
 El primer comando tiene que mostrar el archivo y el segundo tiene que fallar. En el dashboard (☰ → **Inventory data** → agente → **Packages**), los paquetes tienen que ser `deb` de Ubuntu, no `rpm` de Amazon Linux.
 
+## Paso a producción
+
+Revisar estos puntos antes de pasar databus e infobus a producción. Un dominio nuevo para la API de databus no requiere cambios: las reglas de Wazuh filtran por método, ruta y código HTTP (el dominio solo aparece en el texto de la alerta), el bloqueo actúa sobre la IP del cliente y los checks de Zabbix de databus usan la dirección interna `http://orchestrator:8000`.
+
+1. **Hacer que la IP real del cliente llegue a Traefik.** Si producción pone algo delante de Traefik (los proxies nginx de UGIT, un balanceador o un CDN), Traefik registra como `ClientHost` la IP de ese proxy. La primera fuerza bruta bloquearía al proxy y, con él, a todos los usuarios. Configurar en Traefik `forwardedHeaders.trustedIPs` con la IP del proxy, para que Traefik tome la IP real del encabezado `X-Forwarded-For`, o desactivar el bloqueo automático y dejar solo las alertas. Ver [Requisito: la IP del cliente tiene que llegar a Traefik](#requisito-la-ip-del-cliente-tiene-que-llegar-a-traefik) y [Deshabilitar la respuesta activa de Traefik](#deshabilitar-la-respuesta-activa-de-traefik).
+2. **Actualizar la lista blanca si cambian las IPs de los servidores.** Editar las entradas `<white_list>` `10.20.203.23`–`.25` en `config/wazuh_cluster/wazuh_manager.conf` y aplicarlas como en [Cambiar `wazuh_manager.conf` en una instalación existente](#cambiar-wazuh_managerconf-en-una-instalación-existente).
+3. **Revisar el código de databus.** `/api/login/` tiene que seguir respondiendo 400 ante credenciales incorrectas (reglas 100141 y 100142), y los healthchecks de `compose.prod.yml` tienen que seguir siendo los mismos (regla 100140). Si alguno cambia, actualizar esas reglas.
+4. **Actualizar el check de Zabbix si cambia el dominio de infobus** (no el de databus): editar la línea `infobus.api.ext` en `agent2/zabbix_agent2.conf` del repositorio de Zabbix, que usa `https://infobus.ucr.ac.cr`.
+
 ## Notas de seguridad
 
 - **Credenciales:** van solo en `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` y `config/wazuh_indexer_ssl_certs/`, que están en `.gitignore`. Reemplazar todos los `CAMBIAR` antes de desplegar.

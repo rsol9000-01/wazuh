@@ -513,6 +513,15 @@ docker exec wazuh.agent ls /var/lib/rpm
 
 The first command must show the file and the second one must fail. In the dashboard (☰ → **Inventory data** → agent → **Packages**), the packages must be `deb` from Ubuntu, not `rpm` from Amazon Linux.
 
+## Moving to production
+
+Check these points before moving databus and infobus to production. A new domain for the databus API needs no changes: the Wazuh rules filter by method, path and HTTP code (the domain only appears in the alert text), the block acts on the client IP, and the Zabbix checks of databus use the internal address `http://orchestrator:8000`.
+
+1. **Make the real client IP reach Traefik.** If production puts something in front of Traefik (the UGIT nginx proxies, a load balancer or a CDN), Traefik records the IP of that proxy as `ClientHost`. The first brute force would block the proxy and, with it, every user. Either set `forwardedHeaders.trustedIPs` in Traefik to the proxy IP, so Traefik takes the real IP from the `X-Forwarded-For` header, or disable the automatic block and keep only the alerts. See [Requirement: the client IP must reach Traefik](#requirement-the-client-ip-must-reach-traefik) and [Disable the Traefik active response](#disable-the-traefik-active-response).
+2. **Update the white list if the server IPs change.** Edit the `<white_list>` entries `10.20.203.23`–`.25` in `config/wazuh_cluster/wazuh_manager.conf` and apply them as in [Change `wazuh_manager.conf` on an existing installation](#change-wazuh_managerconf-on-an-existing-installation).
+3. **Check the databus code.** `/api/login/` must keep answering 400 to wrong credentials (rules 100141 and 100142), and the healthchecks of `compose.prod.yml` must stay the same (rule 100140). If either changes, update those rules.
+4. **Update the Zabbix check if the infobus domain changes** (not the databus one): edit the `infobus.api.ext` line in `agent2/zabbix_agent2.conf` of the Zabbix repository, which uses `https://infobus.ucr.ac.cr`.
+
 ## Security notes
 
 - **Credentials:** they go only in `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` and `config/wazuh_indexer_ssl_certs/`, which are in `.gitignore`. Replace every `CAMBIAR` before deploying.
