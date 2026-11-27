@@ -49,11 +49,14 @@ services:
       - ./config/wazuh_indexer/internal_users.yml:/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+    # No credentials in healthchecks: Docker publishes the command in its events
+    # (exec_create/exec_start), and Wazuh stores them in the alerts. Without -f,
+    # curl succeeds on any HTTP answer (401 included): the indexer is up.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -k -u ${INDEXER_USERNAME}:${INDEXER_PASSWORD} https://localhost:9200 >/dev/null 2>&1"
+          "curl -sk -o /dev/null https://localhost:9200"
         ]
       interval: 15s
       timeout: 10s

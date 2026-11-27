@@ -514,6 +514,7 @@ El primer comando tiene que mostrar el archivo y el segundo tiene que fallar. En
 
 - **Credenciales:** van solo en `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` y `config/wazuh_indexer_ssl_certs/`, que están en `.gitignore`. Reemplazar todos los `CAMBIAR` antes de desplegar.
 - **Vista del host para SCA:** los agentes reciben `pid: host`, `SYS_ADMIN`, `SYS_PTRACE`, AppArmor sin confinar y la raíz del host en solo lectura en `/host`. Pueden leer todo el host y correr comandos en sus namespaces. El riesgo real no crece, porque el socket de Docker ya da un acceso equivalente, pero un agente comprometido puede hacer más de forma directa. Si se quitan esas líneas, SCA se apaga solo.
+- **Healthchecks sin credenciales:** Docker publica el comando de cada healthcheck en sus eventos y Wazuh guarda esos eventos en las alertas, así que una contraseña en un healthcheck termina en el dashboard. El healthcheck del indexador solo revisa que el puerto responda.
 - **Socket de Docker:** los agentes lo montan en modo solo lectura para leer los registros de los contenedores. Eso da mucho acceso al host; la regla 100122 avisa si el socket cambia.
 - **Certificados:** son autofirmados, para la comunicación entre el indexer, el manager y el dashboard. Para exponer la interfaz fuera de la red interna, poner delante un proxy con un certificado válido.
 - **Firewall:** abrir `1514/tcp` y `1515/tcp` solo para los agentes, y `6443/tcp`, `55000/tcp` y `9200/tcp` solo para la red de administración.
