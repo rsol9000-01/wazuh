@@ -358,6 +358,44 @@ docker exec wazuh.manager grep -n white_list /var/ossec/etc/ossec.conf
 
 If a server IP is missing, a burst of errors between servers (for example, srv-infobus requesting a GTFS that no longer exists on srv-databus) can make one block the other for 1 h.
 
+#### Requirement: the client IP must reach Traefik
+
+Rules 100132 and 100134 block the IP that Traefik records as `ClientHost`: the IP that opened the connection to Traefik. The block is only correct if that IP is the real client's.
+
+| Case | What Traefik records | Result |
+| --- | --- | --- |
+| The firewall in front of the server forwards the connection without changing the source IP (destination NAT only) | The real client IP | Only the attacker is blocked |
+| The firewall or another proxy replaces the source IP with its own (source NAT, masquerade or a proxy in front of Traefik) | The firewall or proxy IP, the same for every client | See the consequences below |
+
+Consequences when every client arrives with the firewall IP:
+
+- **The whole service is blocked.** 20 denied requests in 60 s, added up across all users (for example, several screens with an expired token), trigger rule 100132. `firewall-drop` then blocks the firewall IP, and every client loses access to that server for 1 h.
+- **The attacker cannot be identified.** All alerts show the same IP.
+
+Check it on each server behind Traefik. Open any page of the service from a PC whose IP is known, and then run on the server:
+
+```bash
+tail -200 /home/traefik/logs/access.log | python3 -c "import sys,json; print(sorted({json.loads(l)['ClientHost'] for l in sys.stdin}))"
+```
+
+The PC IP must appear in the list. If only the firewall IP appears, disable the Traefik active response as described below.
+
+#### Disable the Traefik active response
+
+Use this when the real client IP cannot reach Traefik. Rules 100132 and 100134 keep raising alerts; only the automatic block stops. The SSH block (rules 5712, 5720 and 5763) is in a different block and is not affected.
+
+1. On srv-gestion, open `config/wazuh_cluster/wazuh_manager.conf`.
+2. Find the `<active-response>` block that contains `<rules_id>100132,100134</rules_id>`.
+3. In that block, change `<disabled>no</disabled>` to `<disabled>yes</disabled>`.
+4. Apply the change with the procedure in [Change `wazuh_manager.conf` on an existing installation](#change-wazuh_managerconf-on-an-existing-installation).
+5. Check that the manager loaded it:
+
+```bash
+docker exec wazuh.manager grep -n -B2 -A3 "100132,100134" /var/ossec/etc/ossec.conf
+```
+
+The output must show `<disabled>yes</disabled>`. To enable it again, repeat the steps with `no`.
+
 ### Volumes
 
 | Volume | Container | Content |

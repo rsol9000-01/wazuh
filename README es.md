@@ -358,6 +358,44 @@ docker exec wazuh.manager grep -n white_list /var/ossec/etc/ossec.conf
 
 Si falta la IP de un servidor, una ráfaga de errores entre servidores (por ejemplo, srv-infobus pidiendo un GTFS que ya no existe en srv-databus) puede hacer que uno bloquee al otro durante 1 h.
 
+#### Requisito: la IP del cliente tiene que llegar a Traefik
+
+Las reglas 100132 y 100134 bloquean la IP que Traefik registra como `ClientHost`: la IP que abrió la conexión con Traefik. El bloqueo solo es correcto si esa IP es la del cliente real.
+
+| Caso | Qué registra Traefik | Resultado |
+| --- | --- | --- |
+| El firewall delante del servidor reenvía la conexión sin cambiar la IP de origen (solo NAT de destino) | La IP real del cliente | Se bloquea solo al atacante |
+| El firewall u otro proxy cambia la IP de origen por la suya (NAT de origen, enmascaramiento o un proxy delante de Traefik) | La IP del firewall o del proxy, la misma para todos los clientes | Ver las consecuencias abajo |
+
+Consecuencias si todos los clientes llegan con la IP del firewall:
+
+- **Se bloquea todo el servicio.** 20 peticiones denegadas en 60 s, sumando las de todos los usuarios (por ejemplo, varias pantallas con un token vencido), disparan la regla 100132. `firewall-drop` bloquea entonces la IP del firewall, y todos los clientes pierden el acceso a ese servidor durante 1 h.
+- **No se puede identificar al atacante.** Todas las alertas muestran la misma IP.
+
+Comprobarlo en cada servidor que esté detrás de Traefik. Abrir cualquier página del servicio desde una PC de IP conocida y luego ejecutar en el servidor:
+
+```bash
+tail -200 /home/traefik/logs/access.log | python3 -c "import sys,json; print(sorted({json.loads(l)['ClientHost'] for l in sys.stdin}))"
+```
+
+La IP de la PC tiene que aparecer en la lista. Si solo aparece la IP del firewall, deshabilitar la respuesta activa de Traefik como se indica abajo.
+
+#### Deshabilitar la respuesta activa de Traefik
+
+Usar esto cuando no sea posible hacer llegar la IP real del cliente a Traefik. Las reglas 100132 y 100134 siguen generando alertas; solo se detiene el bloqueo automático. El bloqueo de SSH (reglas 5712, 5720 y 5763) está en otro bloque y no se ve afectado.
+
+1. En srv-gestion, abrir `config/wazuh_cluster/wazuh_manager.conf`.
+2. Buscar el bloque `<active-response>` que contiene `<rules_id>100132,100134</rules_id>`.
+3. En ese bloque, cambiar `<disabled>no</disabled>` por `<disabled>yes</disabled>`.
+4. Aplicar el cambio con el procedimiento de [Cambiar `wazuh_manager.conf` en una instalación existente](#cambiar-wazuh_managerconf-en-una-instalación-existente).
+5. Comprobar que el manager lo cargó:
+
+```bash
+docker exec wazuh.manager grep -n -B2 -A3 "100132,100134" /var/ossec/etc/ossec.conf
+```
+
+La salida tiene que mostrar `<disabled>yes</disabled>`. Para volver a habilitarla, repetir los pasos con `no`.
+
 ### Volúmenes
 
 | Volumen | Contenedor | Contenido |
