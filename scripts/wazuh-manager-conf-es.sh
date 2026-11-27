@@ -509,6 +509,26 @@ LOCAL_RULES=$(cat <<'XML'
     <group>web,authentication_failures,</group>
   </rule>
 
+  <!-- R14: reglas de fabrica 651 y 652 (bloqueo y desbloqueo de firewall-drop)
+       con la IP bloqueada y la regla que disparo el bloqueo en el mensaje.
+       Mismas condiciones y grupos que en 0015-ossec_rules.xml; solo cambia
+       la descripcion. Probado con wazuh-logtest 4.14.5. -->
+  <rule id="651" level="3" overwrite="yes">
+    <if_sid>650</if_sid>
+    <field name="parameters.program">firewall-drop</field>
+    <field name="command">add</field>
+    <description>Host bloqueado por firewall-drop: $(parameters.alert.data.srcip) (regla $(parameters.alert.rule.id))</description>
+    <group>active_response,pci_dss_11.4,gpg13_4.13,gdpr_IV_35.7.d,nist_800_53_SI.4,tsc_CC6.1,tsc_CC6.8,tsc_CC7.2,tsc_CC7.3,tsc_CC7.4,</group>
+  </rule>
+
+  <rule id="652" level="3" overwrite="yes">
+    <if_sid>650</if_sid>
+    <field name="parameters.program">firewall-drop</field>
+    <field name="command">delete</field>
+    <description>Host desbloqueado por firewall-drop: $(parameters.alert.data.srcip) (regla $(parameters.alert.rule.id))</description>
+    <group>active_response,pci_dss_11.4,gpg13_4.13,gdpr_IV_35.7.d,nist_800_53_SI.4,tsc_CC6.1,tsc_CC6.8,tsc_CC7.2,tsc_CC7.3,tsc_CC7.4,</group>
+  </rule>
+
 </group>
 XML
 )

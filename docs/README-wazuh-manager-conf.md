@@ -147,6 +147,8 @@ They use the range reserved for local rules (100100 and up), in the `simovilab` 
 | 100136 | 7 | 50 × 100133 in 60 s, same `RequestHost` and `RequestPath`, any client; `ignore` 60 s | Missing route requested over and over: a client with a stale URL. Alert only |
 | 100137 | 5 | 100130, `POST` to `/admin/login/` with `DownstreamStatus` 200 | Failed Django admin login (Django answers 200 and shows the form again) |
 | 100138 | 10 | 10 × 100137 in 120 s, same `ClientHost` | Brute force against the Django admin |
+| 651 | 3 | Built-in, overwritten: 650 with `parameters.program` firewall-drop and `command` add | Block by firewall-drop; the message adds the IP and the triggering rule |
+| 652 | 3 | Built-in, overwritten: 650 with `parameters.program` firewall-drop and `command` delete | Unblock by firewall-drop; the message adds the IP and the triggering rule |
 
 ### Project decoders
 
