@@ -385,7 +385,7 @@ Las reglas 100130–100138 leen el access log de Traefik, que registra la IP del
 
 | Comando | Reglas | Dónde se ejecuta | Duración |
 | --- | --- | --- | --- |
-| `firewall-drop` | 5712, 5720 y 5763 (fuerza bruta e intentos fallidos por SSH) | En el agente que generó la alerta (`local`) | 180 s |
+| `firewall-drop` | 5712, 5720 y 5763 (fuerza bruta e intentos fallidos por SSH) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 | `firewall-drop` | 100132, 100134 y 100138 (fuerza bruta y escaneo de rutas en Traefik, y fuerza bruta al admin de Django) | En el agente que generó la alerta (`local`) | 3600 s (1 h) |
 
 Todos los agentes (srv-databus, srv-infobus y srv-gestion) comparten la red del host y tienen la capacidad `NET_ADMIN`, así que `firewall-drop` escribe en el firewall del host y el bloqueo es real. El manager nunca bloquea 127.0.0.1, los tres servidores del proyecto (`10.20.203.23`, `.24` y `.25`: sondeos de Zabbix y Wazuh, y srv-infobus leyendo el GTFS de srv-databus) ni las redes internas de Docker (`172.16.0.0/12`). La regla 100135 (inundación) solo alerta: varias pantallas detrás de un mismo NAT pueden pasar el umbral sin ser un ataque.
