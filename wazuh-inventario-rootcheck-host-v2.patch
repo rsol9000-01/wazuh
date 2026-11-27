@@ -1,0 +1,162 @@
+diff --git a/README es.md b/README es.md
+index d909bf2..ed3dcf5 100644
+--- a/README es.md	
++++ b/README es.md	
+@@ -488,6 +488,28 @@ docker exec wazuh.agent ls /var/ossec/etc/sca-host
+ 
+ El registro tiene que mostrar `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (con el sistema operativo del host) y `SCA: politicas del host activadas.` (o `SCA: host policies enabled.` con el script en inglés). La carpeta tiene que tener un solo archivo. En el dashboard (☰ → **Configuration Assessment** → agente), el nombre de la política tiene que terminar en `(host)`, por ejemplo `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
+ 
++### Inventario, vulnerabilidades y rootcheck
++
++Los demás módulos del agente que miran el host siguen la misma regla: tienen que describir el servidor, no la imagen del agente.
++
++| Módulo | Qué lee | Cómo |
++| --- | --- | --- |
++| Inventario (syscollector): hardware, sistema operativo, red, puertos y procesos | El servidor | `pid: host`, `network_mode: host` y el `/etc/os-release` del host |
++| Inventario: paquetes (los usa la detección de vulnerabilidades) | Paquetes dpkg del servidor | `/var/lib/dpkg` del host montado en solo lectura. `agent/Dockerfile` borra la base rpm y los metadatos de paquetes Python de la imagen, para que no aparezcan como paquetes del servidor |
++| Inventario: usuarios, grupos y servicios | — | Apagados: describirían la imagen del agente |
++| Rootcheck | Archivos, `/dev` y carpetas de sistema del servidor | `<base_directory>/host</base_directory>`; ignora `/host/sys`, `/host/proc` y los datos de Docker |
++
++No cubre: paquetes snap ni paquetes Python o npm instalados fuera de dpkg en el servidor.
++
++Revisarlo después de levantar el agente:
++
++```bash
++docker exec wazuh.agent ls /var/lib/dpkg/status
++docker exec wazuh.agent ls /var/lib/rpm
++```
++
++El primer comando tiene que mostrar el archivo y el segundo tiene que fallar. En el dashboard (☰ → **Inventory data** → agente → **Packages**), los paquetes tienen que ser `deb` de Ubuntu, no `rpm` de Amazon Linux.
++
+ ## Notas de seguridad
+ 
+ - **Credenciales:** van solo en `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` y `config/wazuh_indexer_ssl_certs/`, que están en `.gitignore`. Reemplazar todos los `CAMBIAR` antes de desplegar.
+diff --git a/README.md b/README.md
+index 85f198e..ff82d24 100644
+--- a/README.md
++++ b/README.md
+@@ -488,6 +488,28 @@ docker exec wazuh.agent ls /var/ossec/etc/sca-host
+ 
+ The log must show `SCA: host ubuntu 24.04 -> ubuntu/cis_ubuntu24-04.yml -> …` (with the host operating system) and `SCA: host policies enabled.`, and the folder must hold only one file. In the dashboard (☰ → **Configuration Assessment** → agent), the policy name must end in `(host)`, for example `CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0. (host)`.
+ 
++### Inventory, vulnerabilities and rootcheck
++
++The other host modules of the agent follow the same rule: they must describe the server, not the agent image.
++
++| Module | What it reads | How |
++| --- | --- | --- |
++| Inventory (syscollector): hardware, operating system, network, ports and processes | The server | `pid: host`, `network_mode: host` and `/etc/os-release` of the host |
++| Inventory: packages (used by vulnerability detection) | dpkg packages of the server | `/var/lib/dpkg` of the host mounted read-only. `agent/Dockerfile` removes the rpm database and the Python package metadata of the image, so they are not reported as server packages |
++| Inventory: users, groups and services | — | Off: they would describe the agent image |
++| Rootcheck | Files, `/dev` and system folders of the server | `<base_directory>/host</base_directory>`; ignores `/host/sys`, `/host/proc` and the Docker data |
++
++Not covered: snap packages and Python or npm packages installed outside dpkg on the server.
++
++Check it after starting the agent:
++
++```bash
++docker exec wazuh.agent ls /var/lib/dpkg/status
++docker exec wazuh.agent ls /var/lib/rpm
++```
++
++The first command must show the file and the second one must fail. In the dashboard (☰ → **Inventory data** → agent → **Packages**), the packages must be `deb` from Ubuntu, not `rpm` from Amazon Linux.
++
+ ## Security notes
+ 
+ - **Credentials:** they go only in `.env`, `config/wazuh_cluster/authd.pass`, `config/wazuh_indexer/internal_users.yml`, `config/wazuh_dashboard/wazuh.yml` and `config/wazuh_indexer_ssl_certs/`, which are in `.gitignore`. Replace every `CAMBIAR` before deploying.
+diff --git a/agent/Dockerfile b/agent/Dockerfile
+index 4e6b695..a987577 100644
+--- a/agent/Dockerfile
++++ b/agent/Dockerfile
+@@ -15,3 +15,17 @@ COPY sca_host.py /opt/sca_host.py
+ # Remove those two steps and stop the build if any is left.
+ RUN sed -i '/s6-nuke/d' /etc/s6/init/init-stage3 && \
+     ! grep -q s6-nuke /etc/s6/init/init-stage3
++# Package inventory (syscollector, used by vulnerability detection) must list
++# the packages of the server, not of this image. The host dpkg database is
++# mounted at /var/lib/dpkg (see the compose files). Remove the rpm database
++# and the Python package metadata of the image so they are not reported as
++# packages of the server. Keep this step last: dnf cannot run after it.
++# The imports check that the agent scripts still work.
++# (Python is used for the cleanup because the image has no find.)
++RUN rm -rf /var/lib/rpm /usr/lib/sysimage/rpm && \
++    python3 -c "import glob, os, shutil; \
++[shutil.rmtree(p) if os.path.isdir(p) else os.remove(p) \
++ for b in ('/usr/lib', '/usr/lib64', '/usr/local/lib', '/usr/local/lib64') \
++ for e in ('dist-info', 'egg-info') \
++ for p in glob.glob(b + '/python*/*-packages/*.' + e)]" && \
++    python3 -c "import docker, yaml, requests, urllib3"
+diff --git a/agent/conf/ossec.conf b/agent/conf/ossec.conf
+index 6485288..d236559 100644
+--- a/agent/conf/ossec.conf
++++ b/agent/conf/ossec.conf
+@@ -50,8 +50,15 @@
+ 
+     <skip_nfs>yes</skip_nfs>
+ 
+-    <ignore>/var/lib/containerd</ignore>
+-    <ignore>/var/lib/docker/overlay2</ignore>
++    <!-- The agent runs in Docker: check the server files mounted read-only at
++         /host, not the agent image. Processes, ports and interfaces are
++         already the host ones (pid: host and network_mode: host). -->
++    <base_directory>/host</base_directory>
++
++    <ignore>/host/sys</ignore>
++    <ignore>/host/proc</ignore>
++    <ignore>/host/var/lib/containerd</ignore>
++    <ignore>/host/var/lib/docker</ignore>
+   </rootcheck>
+ 
+   <wodle name="cis-cat">
+@@ -94,10 +101,14 @@
+     <packages>yes</packages>
+     <ports all="yes">yes</ports>
+     <processes>yes</processes>
+-    <users>yes</users>
+-    <groups>yes</groups>
+-    <services>yes</services>
+-    <browser_extensions>yes</browser_extensions>
++    <!-- The agent runs in Docker. Host data: hardware, os, network, ports,
++         processes and dpkg packages. Users, groups and services would
++         describe the agent image, so they are off. Browser extensions do
++         not apply to a server. -->
++    <users>no</users>
++    <groups>no</groups>
++    <services>no</services>
++    <browser_extensions>no</browser_extensions>
+ 
+     <!-- Database synchronization settings -->
+     <synchronization>
+diff --git a/agent/docker-compose-agent.yml b/agent/docker-compose-agent.yml
+index a47d4e3..4387e1d 100644
+--- a/agent/docker-compose-agent.yml
++++ b/agent/docker-compose-agent.yml
+@@ -62,7 +62,10 @@ services:
+       - /var/log:/var/log:ro
+       # Traefik access log (JSON). Wazuh reads it at /home/traefik/logs/access.log
+       - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
++      # Inventory of the server: operating system and dpkg packages of the
++      # host (vulnerability detection). See agent/Dockerfile.
+       - /etc/os-release:/etc/os-release:ro
++      - /var/lib/dpkg:/var/lib/dpkg:ro
+       - /:/host:ro
+       #- /sys:/sys:ro
+       #- /etc:/host/etc:ro
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 4d85917..6f182a5 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -267,9 +267,10 @@ services:
+       - ${TRAEFIK_LOGS_PATH:-/home/traefik/logs}:/home/traefik/logs:ro
+       - wazuh_agent_etc:/var/ossec/etc
+       - /:/host:ro
+-      # - /etc:/host/etc:ro                     # opcional, para FIM del host
+-      # - /etc/os-release:/etc/os-release:ro    # opcional, solo cosmético en inventario
+-      #- /etc/os-release:/etc/os-release:ro
++      # Inventory of the server: operating system and dpkg packages of the
++      # host (vulnerability detection). See agent/Dockerfile.
++      - /etc/os-release:/etc/os-release:ro
++      - /var/lib/dpkg:/var/lib/dpkg:ro
+     entrypoint: ["/init_01.sh"]
+     depends_on:
+       wazuh-init:

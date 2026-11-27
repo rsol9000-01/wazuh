@@ -21,8 +21,11 @@ RUN sed -i '/s6-nuke/d' /etc/s6/init/init-stage3 && \
 # and the Python package metadata of the image so they are not reported as
 # packages of the server. Keep this step last: dnf cannot run after it.
 # The imports check that the agent scripts still work.
+# (Python is used for the cleanup because the image has no find.)
 RUN rm -rf /var/lib/rpm /usr/lib/sysimage/rpm && \
-    find $(ls -d /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 2>/dev/null) \
-         -path '*python3*' \( -name '*.dist-info' -o -name '*.egg-info' \) -prune \
-         -exec rm -rf {} + && \
+    python3 -c "import glob, os, shutil; \
+[shutil.rmtree(p) if os.path.isdir(p) else os.remove(p) \
+ for b in ('/usr/lib', '/usr/lib64', '/usr/local/lib', '/usr/local/lib64') \
+ for e in ('dist-info', 'egg-info') \
+ for p in glob.glob(b + '/python*/*-packages/*.' + e)]" && \
     python3 -c "import docker, yaml, requests, urllib3"
